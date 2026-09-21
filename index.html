@@ -965,6 +965,7 @@ tr:hover td{background:var(--surface2)}
             <button class="btn btn-sm" onclick="(function(){document.getElementById(&#39;mov-filter&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-tipo&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-mkt&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-fecha&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-notas&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-noccl&#39;).checked=false;document.getElementById(&#39;mov-filter-nomep&#39;).checked=false;renderMovimientos();})()" title="Limpiar filtros" style="color:var(--text3)">✕</button>
             <button class="btn" onclick="exportCSV()">↓ CSV</button>
             <button id="btn-recat-ticker" class="btn" onclick="recategorizarTicker()" title="Cambiar el mercado (y recalcular el precio) de TODOS los movimientos del ticker filtrado">🔧 Recategorizar ticker</button>
+            <button class="btn" onclick="repararIdsDuplicados()" title="Corrige movimientos que quedaron con el mismo ID por un bug de importación masiva (hace que 'Editar' abra la fila equivocada)">🩹 Reparar IDs duplicados</button>
             <button id="btn-purgar-ticker" class="btn btn-d" onclick="purgarTicker()" title="Borrar TODOS los movimientos del ticker filtrado" style="display:none">🗑 Borrar ticker</button>
             <button class="btn btn-d" onclick="clearAll()" title="Borrar todos los movimientos">🗑 Borrar todo</button>
           </div>
@@ -3135,6 +3136,25 @@ function recategorizarTicker(){
   if(filterMktEl) filterMktEl.value=''; // por si el filtro de mercado tapaba la fila recién movida
   saveAndRender();
   alert('✓ '+corregidos+' movimiento(s) de '+ticker+' recategorizados a '+nuevoMkt+' y con el precio recalculado.');
+}
+
+// Reasigna un id nuevo y único a cualquier movimiento cuyo id esté duplicado (bug de
+// import masivo viejo: Date.now()+random podía repetirse entre cientos de filas creadas
+// en el mismo milisegundo). Sin esto, "Editar" podía abrir la primera fila que compartía
+// el id, no la que realmente se tocó.
+function repararIdsDuplicados(){
+  var vistos={};
+  var duplicados=[];
+  movimientos.forEach(function(m){
+    if(vistos[m.id]) duplicados.push(m); else vistos[m.id]=true;
+  });
+  if(!duplicados.length){alert('No encontré IDs duplicados. Todo bien.');return;}
+  var base=Date.now();
+  duplicados.forEach(function(m,i){
+    m.id=base+i+1; // +1 para no chocar con el primero que sigue teniendo el id viejo
+  });
+  saveAndRender();
+  alert('✓ Se repararon '+duplicados.length+' movimiento(s) con ID duplicado. Ya podés editarlos normalmente.');
 }
 
 function toggleFinish(id){
@@ -6048,6 +6068,8 @@ function biConfirmarImport(){
   var nuevosMov=[];
   var errores=[];
 
+  var _biIdBase=Date.now();
+  var _biIdIdx=0;
   _biParsed.compraventa.forEach(function(m){
     var mkt=_biMercadoDe(m.ticker);
     if(!mkt){ errores.push(m.ticker+': sin mercado'); return; }
@@ -6070,7 +6092,7 @@ function biConfirmarImport(){
     }
 
     nuevosMov.push({
-      id:Date.now()+Math.floor(Math.random()*100000), fecha:m.fecha, tipo:m.tipo, mercado:mkt,
+      id:_biIdBase+(_biIdIdx++), fecha:m.fecha, tipo:m.tipo, mercado:mkt,
       ticker:m.ticker, qty:m.qty, precioARS:precioARS, ccl:cclVal, ratio:ratio, precioUSD:precioUSD,
       comision:0, comisionPct:0, notas:'Importado desde Bull Market ('+m.comprobante+')',
       finish:false, owner:undefined, loteMethod: m.tipo==='venta' ? 'promedio' : undefined
