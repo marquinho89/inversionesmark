@@ -964,6 +964,7 @@ tr:hover td{background:var(--surface2)}
             </label>
             <button class="btn btn-sm" onclick="(function(){document.getElementById(&#39;mov-filter&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-tipo&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-mkt&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-fecha&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-notas&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-noccl&#39;).checked=false;document.getElementById(&#39;mov-filter-nomep&#39;).checked=false;renderMovimientos();})()" title="Limpiar filtros" style="color:var(--text3)">✕</button>
             <button class="btn" onclick="exportCSV()">↓ CSV</button>
+            <button id="btn-recat-ticker" class="btn" onclick="recategorizarTicker()" title="Cambiar el mercado (y recalcular el precio) de TODOS los movimientos del ticker filtrado">🔧 Recategorizar ticker</button>
             <button id="btn-purgar-ticker" class="btn btn-d" onclick="purgarTicker()" title="Borrar TODOS los movimientos del ticker filtrado" style="display:none">🗑 Borrar ticker</button>
             <button class="btn btn-d" onclick="clearAll()" title="Borrar todos los movimientos">🗑 Borrar todo</button>
           </div>
@@ -1810,6 +1811,13 @@ tr:hover td{background:var(--surface2)}
           </div>
           <div id="bi-preview"></div>
           <div id="bi-status" style="margin-top:10px;font-size:.75rem"></div>
+          <div style="margin-top:1.4rem;padding-top:1rem;border-top:1px solid var(--border2)">
+            <div style="font-size:.72rem;color:var(--text2);margin-bottom:8px">
+              Si algunos movimientos quedaron sin CCL/MEP para su fecha (huecos en el histórico), completalos acá antes de recategorizar tickers:
+            </div>
+            <button class="btn btn-sm" onclick="rellenarHistoricoCCLMEP()">📈 Completar histórico de CCL/MEP</button>
+            <div id="bi-cclhist-status" style="margin-top:8px;font-size:.72rem"></div>
+          </div>
         </div>
       </div>
       </div>
@@ -3084,6 +3092,49 @@ function purgarTicker(){
   if(!confirm('⚠️ Borrar TODOS los movimientos de '+ticker+'?\n\n'+detalle+' — '+afectados.length+' total\n\nEsta acción no se puede deshacer.'))return;
   movimientos=movimientos.filter(function(m){return (m.ticker||'').toUpperCase()!==ticker;});
   saveAndRender();
+}
+
+// Corrige el MERCADO y el PRECIO de TODOS los movimientos de un ticker a la vez (no solo el
+// que se esté editando en el modal). Necesario porque un ticker mal clasificado al importar
+// (p.ej. un bono cargado como "Argentina") tiene el precioARS guardado SIN dividir por 100 en
+// TODOS sus movimientos — corregir uno solo deja el resto todavía mal.
+function recategorizarTicker(){
+  var filterEl=document.getElementById('mov-filter');
+  var ticker=(filterEl?filterEl.value:'').trim().toUpperCase();
+  if(!ticker){alert('Escribí un ticker en el filtro primero (el mismo que usás para buscar en la tabla).');return;}
+  var afectados=movimientos.filter(function(m){return (m.ticker||'').toUpperCase()===ticker;});
+  if(!afectados.length){alert('No hay movimientos para '+ticker+'.');return;}
+
+  var mercados=['USA','ETF','ARGENTINA','BONOS','ON','FCI','BRASIL','EUROPA','CHINA','CRIPTO'];
+  var actual=afectados[0].mercado||'(sin definir)';
+  var opciones=mercados.map(function(m,i){return (i+1)+'='+m;}).join('  ');
+  var resp=prompt('Recategorizar TODOS los '+afectados.length+' movimiento(s) de '+ticker+'.\nMercado actual: '+actual+'\n\nElegí el nuevo mercado escribiendo el número:\n'+opciones, '');
+  if(resp==null) return; // canceló
+  var idx=parseInt(resp,10);
+  if(isNaN(idx)||idx<1||idx>mercados.length){alert('Opción inválida.');return;}
+  var nuevoMkt=mercados[idx-1];
+  var eraBonoON=function(mk){return mk==='BONOS'||mk==='ON';};
+
+  if(!confirm('¿Confirmás pasar '+ticker+' ('+afectados.length+' movimiento(s)) a "'+nuevoMkt+'"?\n\nEsto recalcula el precio de cada movimiento según corresponda (÷100 si es Bono/ON, sin dividir si no lo es), usando el precio ORIGINAL de cada uno para no arrastrar errores previos.'))return;
+
+  var corregidos=0;
+  afectados.forEach(function(m){
+    // Reconstruir el precio "crudo" (tal cual estaba cotizado, sin el ÷100 que pudiera
+    // haberse aplicado o no según la clasificación vieja) antes de aplicar la nueva regla.
+    var precioCrudo = eraBonoON(m.mercado) ? (m.precioARS*100) : m.precioARS;
+    m.mercado=nuevoMkt;
+    m.precioARS = eraBonoON(nuevoMkt) ? (precioCrudo/100) : precioCrudo;
+    var ratio=getRatio(m.ticker)||1;
+    var tc=m.ccl||getTC(m.fecha,nuevoMkt);
+    if(isBonoUSDDirecto(m.ticker)&&m.precioARS){
+      m.precioUSD=m.precioARS; m.ratio=ratio;
+    } else if(tc&&m.precioARS){
+      m.ccl=tc; m.precioUSD=m.precioARS*ratio/tc; m.ratio=ratio;
+    }
+    corregidos++;
+  });
+  saveAndRender();
+  alert('✓ '+corregidos+' movimiento(s) de '+ticker+' recategorizados a '+nuevoMkt+' y con el precio recalculado.');
 }
 
 function toggleFinish(id){
@@ -7899,7 +7950,7 @@ async function fetchTopbarRates(){
           d.setDate(d.getDate()-1);
         }
         if(!prevCCL){
-          var rh=await fetchWithTimeout('https://api.argentinadatos.com/v1/cotizaciones/dolares/ccl',{},5000);
+          var rh=await fetchWithTimeout('https://api.argentinadatos.com/v1/cotizaciones/dolares/contadoconliqui',{},5000);
           if(rh.ok){var dh=await rh.json();if(dh&&dh.length>=2)prevCCL=parseFloat(dh[dh.length-2].venta);}
         }
         if(prevCCL&&prevCCL>0){
@@ -7942,6 +7993,51 @@ async function fetchTopbarRates(){
 }
 
 function trkShowPin(){ trkShowApp(); }
+
+// Trae el HISTÓRICO COMPLETO de CCL y MEP desde argentinadatos.com (fuente: DolarApi) y
+// completa los huecos de CCL_TABLE/MEP_TABLE — no pisa valores que ya existan, sólo llena
+// lo que falta. Persiste igual que los overrides normales (localStorage + Supabase).
+async function rellenarHistoricoCCLMEP(){
+  var statusEl=document.getElementById('bi-cclhist-status');
+  if(statusEl){statusEl.style.color='var(--text2)';statusEl.textContent='Descargando histórico completo…';}
+  function fechaISOaDDMMYYYY(iso){
+    var p=String(iso).slice(0,10).split('-'); // "YYYY-MM-DD..." -> tomar sólo la fecha
+    if(p.length!==3) return null;
+    return p[2]+'/'+p[1]+'/'+p[0];
+  }
+  try{
+    var [rc,rm]=await Promise.all([
+      fetch('https://api.argentinadatos.com/v1/cotizaciones/dolares/contadoconliqui'),
+      fetch('https://api.argentinadatos.com/v1/cotizaciones/dolares/bolsa')
+    ]);
+    if(!rc.ok||!rm.ok) throw new Error('HTTP '+rc.status+'/'+rm.status);
+    var dc=await rc.json(), dm=await rm.json();
+    var agregadosCCL=0, agregadosMEP=0;
+    dc.forEach(function(row){
+      var k=fechaISOaDDMMYYYY(row.fecha);
+      var v=parseFloat(row.venta);
+      if(k&&v>0&&!CCL_TABLE[k]){CCL_TABLE[k]=v;agregadosCCL++;}
+    });
+    dm.forEach(function(row){
+      var k=fechaISOaDDMMYYYY(row.fecha);
+      var v=parseFloat(row.venta);
+      if(k&&v>0&&!MEP_TABLE[k]){MEP_TABLE[k]=v;agregadosMEP++;}
+    });
+    try{
+      localStorage.setItem('ptNYSE_ccl_override',JSON.stringify(CCL_TABLE));
+      localStorage.setItem('ptNYSE_mep_override',JSON.stringify(MEP_TABLE));
+    }catch(e){}
+    sbSetConfig('ccl_override',CCL_TABLE);
+    sbSetConfig('mep_override',MEP_TABLE);
+    if(statusEl){
+      statusEl.style.color='var(--accent)';
+      statusEl.textContent='✓ Listo: '+agregadosCCL+' fecha(s) de CCL y '+agregadosMEP+' de MEP completadas. Los movimientos que ya tenías cargados no se recalculan solos — si alguno quedó con un valor aproximado, editalo o usá "Recategorizar ticker" para que tome el nuevo dato.';
+    }
+    renderPortfolio();
+  }catch(e){
+    if(statusEl){statusEl.style.color='var(--red)';statusEl.textContent='No se pudo descargar el histórico: '+e.message;}
+  }
+}
 
 function trkShowApp(){
   var app=document.getElementById('trk-app');
