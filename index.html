@@ -5769,26 +5769,28 @@ function _biParseArchivo(rows, tipoArchivo){
   var out={compraventa:[],dividendos:[],ignorados:0};
   if(!rows||!rows.length) return out;
 
-  // La fila de encabezados no siempre es la primera (puede haber título/cuenta/fila en
-  // blanco antes) — se busca entre las primeras 15 filas la que tenga 'comprobante' y 'especie'.
-  var hdrIdx=-1, hdr=null;
+  // Bull Market siempre exporta estas 10 columnas EN ESTE ORDEN FIJO:
+  // Liquida, Operado, Comprobante, Numero, Cantidad, Especie, Precio, Importe, Saldo, Referencia.
+  // Se usa la POSICIÓN de cada columna (no el texto del encabezado) para no depender de
+  // que el nombre venga exactamente igual — solo se busca la fila donde la columna 2
+  // (índice 2) diga "Comprobante", para saber dónde arrancan los datos.
+  var IDX={LIQUIDA:0,OPERADO:1,COMPROBANTE:2,NUMERO:3,CANTIDAD:4,ESPECIE:5,PRECIO:6,IMPORTE:7,SALDO:8,REFERENCIA:9};
+
+  var hdrIdx=-1;
   for(var hi=0; hi<Math.min(15,rows.length); hi++){
     var r=rows[hi]; if(!r) continue;
-    var norm=r.map(function(h){return String(h==null?'':h).trim().toLowerCase();});
-    if(norm.indexOf('comprobante')>=0 && norm.indexOf('especie')>=0){ hdrIdx=hi; hdr=norm; break; }
+    var c2=String(r[IDX.COMPROBANTE]==null?'':r[IDX.COMPROBANTE]).trim().toLowerCase();
+    if(c2==='comprobante'){ hdrIdx=hi; break; }
   }
   if(hdrIdx<0){
-    var primeraFila=(rows[0]||[]).map(function(h){return String(h==null?'':h);}).filter(Boolean).join(' | ');
-    out.error='No reconozco las columnas de este archivo. Primera fila encontrada: "'+(primeraFila||'(vacía)')+'"';
+    var dump=rows.slice(0,3).map(function(r,ri){
+      return 'fila'+ri+': ['+(r||[]).map(function(h,idx){return 'col'+idx+':"'+String(h==null?'':h)+'"';}).join(' , ')+']';
+    }).join('  ||  ');
+    out.error='No reconozco las columnas de este archivo ('+rows.length+' filas totales). '+dump;
     return out;
   }
-  var iOperado=hdr.indexOf('operado'), iComp=hdr.indexOf('comprobante'),
-      iCant=hdr.indexOf('cantidad'), iEsp=hdr.indexOf('especie'), iPrecio=hdr.indexOf('precio'),
-      iImporte=hdr.indexOf('importe');
-  if(iOperado<0||iComp<0||iCant<0||iEsp<0||iPrecio<0||iImporte<0){
-    out.error='No reconozco las columnas de este archivo — ¿es un extracto de Cuenta Corriente de Bull Market?';
-    return out;
-  }
+  var iOperado=IDX.OPERADO, iComp=IDX.COMPROBANTE, iCant=IDX.CANTIDAD,
+      iEsp=IDX.ESPECIE, iPrecio=IDX.PRECIO, iImporte=IDX.IMPORTE;
   var compraSet, ventaSet, divSet;
   if(tipoArchivo==='pesos'){ compraSet=BI_COMPRA_PESOS; ventaSet=BI_VENTA_PESOS; divSet=BI_DIV_PESOS; }
   else if(tipoArchivo==='dolar'){ compraSet=BI_COMPRA_DOLAR; ventaSet=BI_VENTA_DOLAR; divSet=BI_DIV_DOLAR; }
