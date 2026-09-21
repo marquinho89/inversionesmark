@@ -5717,34 +5717,41 @@ var BI_DIV_CABLE  = ['DIVIDENDOS','RENTA Y AMORTIZ'];
 // Todo lo demás (caución, transferencias, retenciones, notas de crédito/débito,
 // gastos/aranceles) se ignora a propósito: no es una posición ni un cobro neto.
 
+var _biPending={pesos:null,dolar:null,cable:null}; // promesas de lectura en curso, para que biProcesar espere a que terminen
+
 function biLoadFile(which,input){
   var f=input.files&&input.files[0];
   var nameEl=document.getElementById('bi-'+(which==='pesos'?'pesos':which==='dolar'?'dolar':'cable')+'-name');
   if(!f){ if(nameEl)nameEl.textContent='Sin archivo'; _biFiles[which]=null; return; }
-  if(nameEl) nameEl.textContent=f.name;
-  var reader=new FileReader();
-  reader.onload=function(e){
-    try{
-      var wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
-      // Buscar, entre TODAS las hojas del archivo, la que tenga la fila de encabezados
-      // (Comprobante + Especie) — no asumir que es la primera hoja del workbook.
-      var rowsElegidas=null;
-      for(var si=0; si<wb.SheetNames.length; si++){
-        var rowsTmp=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[si]],{header:1,defval:null});
-        var tieneHeader=rowsTmp.slice(0,15).some(function(r){
-          if(!r) return false;
-          var norm=r.map(function(h){return String(h==null?'':h).trim().toLowerCase();});
-          return norm.indexOf('comprobante')>=0 && norm.indexOf('especie')>=0;
-        });
-        if(tieneHeader){ rowsElegidas=rowsTmp; break; }
+  if(nameEl) nameEl.textContent=f.name+' (leyendo…)';
+  var p=new Promise(function(resolve){
+    var reader=new FileReader();
+    reader.onload=function(e){
+      try{
+        var wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+        // Buscar, entre TODAS las hojas del archivo, la que tenga la columna 2 = "Comprobante"
+        // (posición fija, no depende del texto exacto del resto de encabezados).
+        var rowsElegidas=null;
+        for(var si=0; si<wb.SheetNames.length; si++){
+          var rowsTmp=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[si]],{header:1,defval:null});
+          var tieneHeader=rowsTmp.slice(0,15).some(function(r){
+            if(!r) return false;
+            return String(r[2]==null?'':r[2]).trim().toLowerCase()==='comprobante';
+          });
+          if(tieneHeader){ rowsElegidas=rowsTmp; break; }
+        }
+        _biFiles[which]=rowsElegidas || XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:null});
+      }catch(err){
+        alert('No pude leer el archivo de '+which+': '+err.message);
+        _biFiles[which]=null;
       }
-      _biFiles[which]=rowsElegidas || XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:null});
-    }catch(err){
-      alert('No pude leer el archivo de '+which+': '+err.message);
-      _biFiles[which]=null;
-    }
-  };
-  reader.readAsArrayBuffer(f);
+      if(nameEl) nameEl.textContent=f.name+' ('+(_biFiles[which]?_biFiles[which].length:0)+' filas leídas)';
+      resolve();
+    };
+    reader.readAsArrayBuffer(f);
+  });
+  _biPending[which]=p;
+  return p;
 }
 
 function _biFechaDDMMYYYY(v){
@@ -5838,8 +5845,10 @@ function _biParseArchivo(rows, tipoArchivo){
   return out;
 }
 
-function biProcesar(){
+async function biProcesar(){
   var statusEl=document.getElementById('bi-status');
+  // Esperar a que terminen de leerse (son lecturas asincrónicas) los archivos que estén en curso.
+  await Promise.all([_biPending.pesos,_biPending.dolar,_biPending.cable].filter(Boolean));
   if(!_biFiles.pesos&&!_biFiles.dolar&&!_biFiles.cable){
     if(statusEl){statusEl.style.color='var(--red)';statusEl.textContent='Subí al menos un archivo primero.';}
     return;
