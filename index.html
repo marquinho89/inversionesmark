@@ -3108,14 +3108,12 @@ function recategorizarTicker(){
   var mercados=['USA','ETF','ARGENTINA','BONOS','ON','FCI','BRASIL','EUROPA','CHINA','CRIPTO'];
   var actual=afectados[0].mercado||'(sin definir)';
   var opciones=mercados.map(function(m,i){return (i+1)+'='+m;}).join('  ');
-  var resp=prompt('Recategorizar TODOS los '+afectados.length+' movimiento(s) de '+ticker+'.\nMercado actual: '+actual+'\n\nElegí el nuevo mercado escribiendo el número:\n'+opciones, '');
+  var resp=prompt('Recategorizar TODOS los '+afectados.length+' movimiento(s) de '+ticker+'.\nMercado actual: '+actual+'\n\nElegí el nuevo mercado escribiendo el número (se aplica al instante, sin otro cuadro después):\n'+opciones, '');
   if(resp==null) return; // canceló
   var idx=parseInt(resp,10);
   if(isNaN(idx)||idx<1||idx>mercados.length){alert('Opción inválida.');return;}
   var nuevoMkt=mercados[idx-1];
   var eraBonoON=function(mk){return mk==='BONOS'||mk==='ON';};
-
-  if(!confirm('¿Confirmás pasar '+ticker+' ('+afectados.length+' movimiento(s)) a "'+nuevoMkt+'"?\n\nEsto recalcula el precio de cada movimiento según corresponda (÷100 si es Bono/ON, sin dividir si no lo es), usando el precio ORIGINAL de cada uno para no arrastrar errores previos.'))return;
 
   var corregidos=0;
   afectados.forEach(function(m){
@@ -3133,6 +3131,8 @@ function recategorizarTicker(){
     }
     corregidos++;
   });
+  var filterMktEl=document.getElementById('mov-filter-mkt');
+  if(filterMktEl) filterMktEl.value=''; // por si el filtro de mercado tapaba la fila recién movida
   saveAndRender();
   alert('✓ '+corregidos+' movimiento(s) de '+ticker+' recategorizados a '+nuevoMkt+' y con el precio recalculado.');
 }
