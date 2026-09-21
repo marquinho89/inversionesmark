@@ -1895,6 +1895,12 @@ var SUPABASE_KEY = 'sb_publishable_YMUY639V3WKE8rBXWDfXFA_6MMNFEm6';
 var sbAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 window._sbAccessToken = null; // token del usuario logueado; sbHeaders() lo usa en vez de la anon key sola
 
+// ⚠️ Único email autorizado a usar este portafolio. La protección REAL vive en las
+// políticas RLS de Supabase (ver comentario junto a las tablas) — esto es solo una
+// pantalla de bloqueo del lado del cliente, para que ni siquiera se vea la interfaz
+// vacía si alguien más se loguea con Google acá por error.
+var ALLOWED_EMAIL = 'marcos.g.della@gmail.com';
+
 function authSignInGoogle(){
   sbAuth.auth.signInWithOAuth({
     provider:'google',
@@ -1922,6 +1928,16 @@ async function authEnsureSession(){
     var res=await sbAuth.auth.getSession();
     var session=res&&res.data&&res.data.session;
     if(session&&session.user){
+      if(session.user.email !== ALLOWED_EMAIL){
+        // Cuenta distinta a la autorizada: cerramos la sesión y avisamos.
+        if(errEl){ errEl.textContent='Esta cuenta ('+session.user.email+') no tiene acceso a este portafolio.'; errEl.style.display='block'; }
+        await sbAuth.auth.signOut();
+        window._sbAccessToken=null;
+        if(gate) gate.style.display='flex';
+        var box0=document.getElementById('auth-user-box');
+        if(box0) box0.style.display='none';
+        return false;
+      }
       window._sbAccessToken=session.access_token;
       if(gate) gate.style.display='none';
       authUpdateUI(session.user);
