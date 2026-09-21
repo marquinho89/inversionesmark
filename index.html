@@ -5719,6 +5719,25 @@ var BI_DIV_CABLE  = ['DIVIDENDOS','RENTA Y AMORTIZ'];
 
 var _biPending={pesos:null,dolar:null,cable:null}; // promesas de lectura en curso, para que biProcesar espere a que terminen
 
+// Algunos exportadores (incluido el de Bull Market, aparentemente) graban en el XML del
+// Excel un rango de datos ("!ref"/<dimension>) desactualizado — más chico que los datos
+// reales. Excel lo ignora y recalcula solo al abrir el archivo, pero SheetJS confía en ese
+// metadato por defecto y corta la lectura ahí. Esta función recalcula el rango real mirando
+// qué celdas tienen contenido de verdad, y lo corrige antes de convertir a filas.
+function _biFixRange(ws){
+  var maxR=0, maxC=0, minR=Infinity, minC=Infinity, huboCeldas=false;
+  Object.keys(ws).forEach(function(addr){
+    if(addr.charAt(0)==='!') return; // saltar metadatos (!ref, !margins, etc.)
+    var dec=XLSX.utils.decode_cell(addr);
+    if(dec.r>maxR) maxR=dec.r; if(dec.c>maxC) maxC=dec.c;
+    if(dec.r<minR) minR=dec.r; if(dec.c<minC) minC=dec.c;
+    huboCeldas=true;
+  });
+  if(!huboCeldas) return;
+  var nuevoRef=XLSX.utils.encode_range({s:{r:minR,c:minC},e:{r:maxR,c:maxC}});
+  ws['!ref']=nuevoRef;
+}
+
 function biLoadFile(which,input){
   var f=input.files&&input.files[0];
   var nameEl=document.getElementById('bi-'+(which==='pesos'?'pesos':which==='dolar'?'dolar':'cable')+'-name');
@@ -5741,6 +5760,7 @@ function biLoadFile(which,input){
         // (posición fija, no depende del texto exacto del resto de encabezados).
         var rowsElegidas=null;
         for(var si=0; si<wb.SheetNames.length; si++){
+          _biFixRange(wb.Sheets[wb.SheetNames[si]]);
           var rowsTmp=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[si]],{header:1,defval:null});
           window._biDebug[which]['filasHoja_'+si]=rowsTmp.length;
           var tieneHeader=rowsTmp.slice(0,15).some(function(r){
