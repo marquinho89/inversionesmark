@@ -5729,11 +5729,20 @@ function biLoadFile(which,input){
     reader.onload=function(e){
       try{
         var wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+        // Info de diagnóstico expuesta en window para poder inspeccionarla desde la consola
+        // del navegador sin tener que escribir JS complicado.
+        window._biDebug=window._biDebug||{};
+        window._biDebug[which]={
+          bytesLeidos: e.target.result.byteLength,
+          hojas: wb.SheetNames,
+          refPorHoja: wb.SheetNames.map(function(n){return n+': '+(wb.Sheets[n]['!ref']||'(sin !ref)');})
+        };
         // Buscar, entre TODAS las hojas del archivo, la que tenga la columna 2 = "Comprobante"
         // (posición fija, no depende del texto exacto del resto de encabezados).
         var rowsElegidas=null;
         for(var si=0; si<wb.SheetNames.length; si++){
           var rowsTmp=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[si]],{header:1,defval:null});
+          window._biDebug[which]['filasHoja_'+si]=rowsTmp.length;
           var tieneHeader=rowsTmp.slice(0,15).some(function(r){
             if(!r) return false;
             return String(r[2]==null?'':r[2]).trim().toLowerCase()==='comprobante';
