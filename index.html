@@ -5726,9 +5726,19 @@ function biLoadFile(which,input){
   reader.onload=function(e){
     try{
       var wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
-      var ws=wb.Sheets[wb.SheetNames[0]];
-      var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
-      _biFiles[which]=rows;
+      // Buscar, entre TODAS las hojas del archivo, la que tenga la fila de encabezados
+      // (Comprobante + Especie) — no asumir que es la primera hoja del workbook.
+      var rowsElegidas=null;
+      for(var si=0; si<wb.SheetNames.length; si++){
+        var rowsTmp=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[si]],{header:1,defval:null});
+        var tieneHeader=rowsTmp.slice(0,15).some(function(r){
+          if(!r) return false;
+          var norm=r.map(function(h){return String(h==null?'':h).trim().toLowerCase();});
+          return norm.indexOf('comprobante')>=0 && norm.indexOf('especie')>=0;
+        });
+        if(tieneHeader){ rowsElegidas=rowsTmp; break; }
+      }
+      _biFiles[which]=rowsElegidas || XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:null});
     }catch(err){
       alert('No pude leer el archivo de '+which+': '+err.message);
       _biFiles[which]=null;
@@ -5758,7 +5768,20 @@ function _biFechaISO(v){
 function _biParseArchivo(rows, tipoArchivo){
   var out={compraventa:[],dividendos:[],ignorados:0};
   if(!rows||!rows.length) return out;
-  var hdr=rows[0].map(function(h){return String(h||'').trim().toLowerCase();});
+
+  // La fila de encabezados no siempre es la primera (puede haber título/cuenta/fila en
+  // blanco antes) — se busca entre las primeras 15 filas la que tenga 'comprobante' y 'especie'.
+  var hdrIdx=-1, hdr=null;
+  for(var hi=0; hi<Math.min(15,rows.length); hi++){
+    var r=rows[hi]; if(!r) continue;
+    var norm=r.map(function(h){return String(h==null?'':h).trim().toLowerCase();});
+    if(norm.indexOf('comprobante')>=0 && norm.indexOf('especie')>=0){ hdrIdx=hi; hdr=norm; break; }
+  }
+  if(hdrIdx<0){
+    var primeraFila=(rows[0]||[]).map(function(h){return String(h==null?'':h);}).filter(Boolean).join(' | ');
+    out.error='No reconozco las columnas de este archivo. Primera fila encontrada: "'+(primeraFila||'(vacía)')+'"';
+    return out;
+  }
   var iOperado=hdr.indexOf('operado'), iComp=hdr.indexOf('comprobante'),
       iCant=hdr.indexOf('cantidad'), iEsp=hdr.indexOf('especie'), iPrecio=hdr.indexOf('precio'),
       iImporte=hdr.indexOf('importe');
@@ -5771,7 +5794,7 @@ function _biParseArchivo(rows, tipoArchivo){
   else if(tipoArchivo==='dolar'){ compraSet=BI_COMPRA_DOLAR; ventaSet=BI_VENTA_DOLAR; divSet=BI_DIV_DOLAR; }
   else { compraSet=[]; ventaSet=[]; divSet=BI_DIV_CABLE; }
 
-  for(var i=1;i<rows.length;i++){
+  for(var i=hdrIdx+1;i<rows.length;i++){
     var r=rows[i];
     if(!r||!r.length) continue;
     var comp=String(r[iComp]||'').trim().toUpperCase();
