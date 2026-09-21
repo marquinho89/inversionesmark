@@ -5766,7 +5766,7 @@ function _biFechaISO(v){
 // esquema fijo de columnas de Bull Market: Liquida/Operado/Comprobante/Numero/
 // Cantidad/Especie/Precio/Importe/Saldo/Referencia.
 function _biParseArchivo(rows, tipoArchivo){
-  var out={compraventa:[],dividendos:[],ignorados:0};
+  var out={compraventa:[],dividendos:[],ignorados:0,totalFilasDato:0,comprobantesVistos:{},motivosIgnorado:{}};
   if(!rows||!rows.length) return out;
 
   // Bull Market siempre exporta estas 10 columnas EN ESTE ORDEN FIJO:
@@ -5801,6 +5801,8 @@ function _biParseArchivo(rows, tipoArchivo){
     if(!r||!r.length) continue;
     var comp=String(r[iComp]||'').trim().toUpperCase();
     if(!comp) continue;
+    out.totalFilasDato++;
+    out.comprobantesVistos[comp]=(out.comprobantesVistos[comp]||0)+1;
     var ticker=String(r[iEsp]||'').trim().toUpperCase();
     var fechaDDMM=_biFechaDDMMYYYY(r[iOperado]);
     var fechaISO=_biFechaISO(r[iOperado]);
@@ -5808,8 +5810,8 @@ function _biParseArchivo(rows, tipoArchivo){
     var precio=typeof r[iPrecio]==='number'?r[iPrecio]:parseFloat(r[iPrecio]);
 
     if(compraSet.indexOf(comp)>=0 || ventaSet.indexOf(comp)>=0){
-      if(!ticker||ticker==='VARIAS'){ out.ignorados++; continue; } // caución u otro sin ticker real
-      if(!fechaDDMM){ out.ignorados++; continue; }
+      if(!ticker||ticker==='VARIAS'){ out.ignorados++; out.motivosIgnorado['sin ticker (col Especie vacía) en '+comp]=(out.motivosIgnorado['sin ticker (col Especie vacía) en '+comp]||0)+1; continue; }
+      if(!fechaDDMM){ out.ignorados++; out.motivosIgnorado['sin fecha válida en '+comp]=(out.motivosIgnorado['sin fecha válida en '+comp]||0)+1; continue; }
       out.compraventa.push({
         tipo: compraSet.indexOf(comp)>=0 ? 'compra':'venta',
         ticker: ticker, fecha: fechaDDMM,
@@ -5817,10 +5819,10 @@ function _biParseArchivo(rows, tipoArchivo){
         origenMoneda: tipoArchivo, comprobante: comp
       });
     } else if(divSet.indexOf(comp)>=0){
-      if(!ticker||!fechaISO){ out.ignorados++; continue; }
+      if(!ticker||!fechaISO){ out.ignorados++; out.motivosIgnorado['sin ticker/fecha en '+comp]=(out.motivosIgnorado['sin ticker/fecha en '+comp]||0)+1; continue; }
       var importe=typeof r[iImporte]==='number'?r[iImporte]:parseFloat(r[iImporte]);
       var monto=isNaN(importe)?null:Math.abs(importe);
-      if(!monto||monto<=0){ out.ignorados++; continue; } // sin monto real, no se puede encolar
+      if(!monto||monto<=0){ out.ignorados++; out.motivosIgnorado['sin monto (col Importe vacía) en '+comp]=(out.motivosIgnorado['sin monto (col Importe vacía) en '+comp]||0)+1; continue; } // sin monto real, no se puede encolar
       out.dividendos.push({
         ticker: ticker, fecha: fechaISO,
         moneda: tipoArchivo==='pesos' ? 'ARS':'USD',
@@ -5830,7 +5832,7 @@ function _biParseArchivo(rows, tipoArchivo){
         acciones: null
       });
     } else {
-      out.ignorados++; // caución, transferencias, notas de crédito/débito, retenciones, aranceles
+      out.ignorados++; out.motivosIgnorado['comprobante no clasificado: '+comp]=(out.motivosIgnorado['comprobante no clasificado: '+comp]||0)+1; // caución, transferencias, notas de crédito/débito, retenciones, aranceles
     }
   }
   return out;
@@ -5842,7 +5844,7 @@ function biProcesar(){
     if(statusEl){statusEl.style.color='var(--red)';statusEl.textContent='Subí al menos un archivo primero.';}
     return;
   }
-  var res={compraventa:[],dividendos:[],ignorados:0};
+  var res={compraventa:[],dividendos:[],ignorados:0,diag:{}};
   ['pesos','dolar','cable'].forEach(function(k){
     if(!_biFiles[k]) return;
     var p=_biParseArchivo(_biFiles[k], k);
@@ -5850,6 +5852,7 @@ function biProcesar(){
     res.compraventa=res.compraventa.concat(p.compraventa);
     res.dividendos=res.dividendos.concat(p.dividendos);
     res.ignorados+=p.ignorados;
+    res.diag[k]={totalFilasDato:p.totalFilasDato, comprobantesVistos:p.comprobantesVistos, motivosIgnorado:p.motivosIgnorado};
   });
 
   // Tickers nuevos (compra/venta) que no están en SECTOR_MAP ni tienen mercado ya elegido
@@ -5924,6 +5927,29 @@ function biRenderPreview(){
 
   var puedeImportar = !faltanMercado.length && !faltanPrecio.length && (nCompras+nVentas+_biParsed.dividendos.length)>0;
   html+='<button class="btn btn-a btn-sm" style="margin-top:10px" '+(puedeImportar?'':'disabled')+' onclick="biConfirmarImport()">Confirmar importación</button>';
+
+  // Panel de diagnóstico: qué encontró realmente en cada archivo (para destrabar
+  // casos donde el resultado da todo en cero y no queda claro por qué).
+  html+='<details style="margin-top:14px"><summary style="cursor:pointer;font-size:.72rem;color:var(--text3)">Ver diagnóstico detallado (por qué se clasificó así)</summary>';
+  html+='<div style="font-size:.68rem;color:var(--text2);margin-top:8px;font-family:var(--mono);white-space:pre-wrap;line-height:1.6">';
+  ['pesos','dolar','cable'].forEach(function(k){
+    var d=_biParsed.diag&&_biParsed.diag[k];
+    if(!d){ html+=k.toUpperCase()+': (no se cargó archivo)\n\n'; return; }
+    html+=k.toUpperCase()+': '+d.totalFilasDato+' fila(s) de dato encontradas.\n';
+    var comps=Object.keys(d.comprobantesVistos||{});
+    if(comps.length){
+      html+='  Comprobantes vistos: '+comps.map(function(c){return c+' x'+d.comprobantesVistos[c];}).join(', ')+'\n';
+    } else {
+      html+='  (no se vio ningún valor en la columna Comprobante — revisar si la columna corresponde)\n';
+    }
+    var motivos=Object.keys(d.motivosIgnorado||{});
+    if(motivos.length){
+      html+='  Motivos de filas ignoradas: '+motivos.map(function(m){return m+' x'+d.motivosIgnorado[m];}).join(', ')+'\n';
+    }
+    html+='\n';
+  });
+  html+='</div></details>';
+
   el.innerHTML=html;
 }
 
