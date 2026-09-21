@@ -507,6 +507,7 @@ tr:hover td{background:var(--surface2)}
     <button class="nav-item" onclick="showPage(&#39;dashboard&#39;,this)"><span>📊</span>DashBoard</button>
     <button class="nav-item" onclick="showPage(&#39;rendanual&#39;,this)"><span>📈</span>Rend. Anual</button>
     <button class="nav-item" onclick="showPage(&#39;comparacion&#39;,this)"><span>⇔</span>Comparación</button>
+    <button class="nav-item" onclick="showPage(&#39;importbull&#39;,this)"><span>📥</span>Importar Bull Market</button>
     <button class="nav-item" onclick="showPage(&#39;recomendaciones&#39;,this)"><span>💡</span>Recomendaciones</button>
     <div class="nav-sec">Cambios</div>
     <button class="nav-item" onclick="showPage(&#39;targets&#39;,this)"><span>◎</span>P. Venta</button>
@@ -1768,6 +1769,47 @@ tr:hover td{background:var(--surface2)}
             <button class="btn btn-a btn-sm" onclick="runComparacion()" style="margin-left:auto">Comparar</button>
           </div>
           <div id="cmp-result"></div>
+        </div>
+      </div>
+      </div>
+    </div>
+
+    <!-- IMPORTAR BULL MARKET -->
+    <div class="page" id="page-importbull" style="padding:0">
+      <div style="height:calc(100vh - 100px);overflow-y:auto;overflow-x:hidden;padding:1.2rem">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">📥 Importar movimientos desde Bull Market</span>
+        </div>
+        <div class="card-body" style="padding:.85rem 1rem">
+          <div style="font-size:.72rem;color:var(--text2);margin-bottom:1rem;line-height:1.5">
+            Subí los 3 extractos de "Cuenta Corriente" que baja Bull Market (Pesos, Dólar y Dólar Cable). El sistema arma automáticamente
+            los movimientos de compra/venta y encola los dividendos/cupones en "Pendientes de revisión" (solapa Dividendos) para que los confirmes vos.
+            No se importa nada hasta que apretés "Confirmar importación" al final.
+          </div>
+          <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem">
+            <div>
+              <div style="font-size:.63rem;font-family:var(--mono);color:var(--text3);margin-bottom:4px">Pesos</div>
+              <label class="btn btn-sm" style="cursor:pointer;gap:5px">📂 <span id="bi-pesos-name" style="font-family:var(--mono);font-size:.72rem">Sin archivo</span><input type="file" id="bi-pesos-file" accept=".xlsx,.xls" style="display:none" onchange="biLoadFile('pesos',this)"></label>
+            </div>
+            <div>
+              <div style="font-size:.63rem;font-family:var(--mono);color:var(--text3);margin-bottom:4px">Dólar</div>
+              <label class="btn btn-sm" style="cursor:pointer;gap:5px">📂 <span id="bi-dolar-name" style="font-family:var(--mono);font-size:.72rem">Sin archivo</span><input type="file" id="bi-dolar-file" accept=".xlsx,.xls" style="display:none" onchange="biLoadFile('dolar',this)"></label>
+            </div>
+            <div>
+              <div style="font-size:.63rem;font-family:var(--mono);color:var(--text3);margin-bottom:4px">Dólar Cable</div>
+              <label class="btn btn-sm" style="cursor:pointer;gap:5px">📂 <span id="bi-cable-name" style="font-family:var(--mono);font-size:.72rem">Sin archivo</span><input type="file" id="bi-cable-file" accept=".xlsx,.xls" style="display:none" onchange="biLoadFile('cable',this)"></label>
+            </div>
+            <button class="btn btn-a btn-sm" onclick="biProcesar()" style="margin-left:auto">Procesar archivos</button>
+          </div>
+          <div id="bi-tickers-wrap" style="display:none;margin-bottom:1rem">
+            <div style="font-size:.72rem;color:var(--text2);margin-bottom:8px">
+              Encontré tickers que no tengo clasificados todavía. Elegí el mercado de cada uno antes de importar (afecta cómo se calcula el costo/PPC):
+            </div>
+            <div id="bi-tickers-tbody" style="display:flex;flex-direction:column;gap:6px"></div>
+          </div>
+          <div id="bi-preview"></div>
+          <div id="bi-status" style="margin-top:10px;font-size:.75rem"></div>
         </div>
       </div>
       </div>
@@ -5651,6 +5693,269 @@ function runComparacion(){
   });
   html+='</tbody></table></div>';
   el.innerHTML=html;
+}
+
+// ════════════════════════════════════════════════════════
+// IMPORTAR BULL MARKET — lee los 3 extractos de "Cuenta Corriente"
+// (Pesos / Dólar / Dólar Cable), clasifica cada fila y arma movimientos
+// de compra/venta + cola de dividendos pendientes. No toca nada hasta
+// que se aprieta "Confirmar importación".
+// ════════════════════════════════════════════════════════
+var _biFiles={pesos:null,dolar:null,cable:null};
+var _biParsed=null; // resultado de biProcesar(): {compraventa:[], dividendos:[], ignorados:n, tickersNuevos:[...]}
+var _biMercadoElegido={}; // ticker -> mercado elegido por el usuario
+
+// Comprobantes que representan una operación real de compra/venta
+var BI_COMPRA_PESOS = ['COMPRA NORMAL'];
+var BI_VENTA_PESOS  = ['VENTA'];
+var BI_COMPRA_DOLAR = ['COMPRA PARIDAD'];
+var BI_VENTA_DOLAR  = ['VENTA PARIDAD'];
+// Comprobantes que son cobros (van a la cola de dividendos, no a movimientos)
+var BI_DIV_PESOS  = ['DIVIDENDOS','RENTA Y AMORTIZ'];
+var BI_DIV_DOLAR  = ['RENTA Y AMORTIZ'];
+var BI_DIV_CABLE  = ['DIVIDENDOS','RENTA Y AMORTIZ'];
+// Todo lo demás (caución, transferencias, retenciones, notas de crédito/débito,
+// gastos/aranceles) se ignora a propósito: no es una posición ni un cobro neto.
+
+function biLoadFile(which,input){
+  var f=input.files&&input.files[0];
+  var nameEl=document.getElementById('bi-'+(which==='pesos'?'pesos':which==='dolar'?'dolar':'cable')+'-name');
+  if(!f){ if(nameEl)nameEl.textContent='Sin archivo'; _biFiles[which]=null; return; }
+  if(nameEl) nameEl.textContent=f.name;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+      _biFiles[which]=rows;
+    }catch(err){
+      alert('No pude leer el archivo de '+which+': '+err.message);
+      _biFiles[which]=null;
+    }
+  };
+  reader.readAsArrayBuffer(f);
+}
+
+function _biFechaDDMMYYYY(v){
+  if(v instanceof Date){
+    var d=String(v.getDate()).padStart(2,'0'),m=String(v.getMonth()+1).padStart(2,'0'),y=v.getFullYear();
+    return d+'/'+m+'/'+y;
+  }
+  return null;
+}
+function _biFechaISO(v){
+  if(v instanceof Date){
+    var y=v.getFullYear(),m=String(v.getMonth()+1).padStart(2,'0'),d=String(v.getDate()).padStart(2,'0');
+    return y+'-'+m+'-'+d;
+  }
+  return null;
+}
+
+// Parsea un archivo ya cargado (array de filas, header en la fila 0) usando el
+// esquema fijo de columnas de Bull Market: Liquida/Operado/Comprobante/Numero/
+// Cantidad/Especie/Precio/Importe/Saldo/Referencia.
+function _biParseArchivo(rows, tipoArchivo){
+  var out={compraventa:[],dividendos:[],ignorados:0};
+  if(!rows||!rows.length) return out;
+  var hdr=rows[0].map(function(h){return String(h||'').trim().toLowerCase();});
+  var iOperado=hdr.indexOf('operado'), iComp=hdr.indexOf('comprobante'),
+      iCant=hdr.indexOf('cantidad'), iEsp=hdr.indexOf('especie'), iPrecio=hdr.indexOf('precio'),
+      iImporte=hdr.indexOf('importe');
+  if(iOperado<0||iComp<0||iCant<0||iEsp<0||iPrecio<0||iImporte<0){
+    out.error='No reconozco las columnas de este archivo — ¿es un extracto de Cuenta Corriente de Bull Market?';
+    return out;
+  }
+  var compraSet, ventaSet, divSet;
+  if(tipoArchivo==='pesos'){ compraSet=BI_COMPRA_PESOS; ventaSet=BI_VENTA_PESOS; divSet=BI_DIV_PESOS; }
+  else if(tipoArchivo==='dolar'){ compraSet=BI_COMPRA_DOLAR; ventaSet=BI_VENTA_DOLAR; divSet=BI_DIV_DOLAR; }
+  else { compraSet=[]; ventaSet=[]; divSet=BI_DIV_CABLE; }
+
+  for(var i=1;i<rows.length;i++){
+    var r=rows[i];
+    if(!r||!r.length) continue;
+    var comp=String(r[iComp]||'').trim().toUpperCase();
+    if(!comp) continue;
+    var ticker=String(r[iEsp]||'').trim().toUpperCase();
+    var fechaDDMM=_biFechaDDMMYYYY(r[iOperado]);
+    var fechaISO=_biFechaISO(r[iOperado]);
+    var cantidad=typeof r[iCant]==='number'?r[iCant]:parseFloat(r[iCant]);
+    var precio=typeof r[iPrecio]==='number'?r[iPrecio]:parseFloat(r[iPrecio]);
+
+    if(compraSet.indexOf(comp)>=0 || ventaSet.indexOf(comp)>=0){
+      if(!ticker||ticker==='VARIAS'){ out.ignorados++; continue; } // caución u otro sin ticker real
+      if(!fechaDDMM){ out.ignorados++; continue; }
+      out.compraventa.push({
+        tipo: compraSet.indexOf(comp)>=0 ? 'compra':'venta',
+        ticker: ticker, fecha: fechaDDMM,
+        qty: Math.abs(cantidad)||0, precio: isNaN(precio)?null:precio,
+        origenMoneda: tipoArchivo, comprobante: comp
+      });
+    } else if(divSet.indexOf(comp)>=0){
+      if(!ticker||!fechaISO){ out.ignorados++; continue; }
+      var importe=typeof r[iImporte]==='number'?r[iImporte]:parseFloat(r[iImporte]);
+      var monto=isNaN(importe)?null:Math.abs(importe);
+      if(!monto||monto<=0){ out.ignorados++; continue; } // sin monto real, no se puede encolar
+      out.dividendos.push({
+        ticker: ticker, fecha: fechaISO,
+        moneda: tipoArchivo==='pesos' ? 'ARS':'USD',
+        monto: monto,
+        tipo: comp==='RENTA Y AMORTIZ' ? 'RENTA':'DIV',
+        descr: 'Bull Market · '+comp,
+        acciones: null
+      });
+    } else {
+      out.ignorados++; // caución, transferencias, notas de crédito/débito, retenciones, aranceles
+    }
+  }
+  return out;
+}
+
+function biProcesar(){
+  var statusEl=document.getElementById('bi-status');
+  if(!_biFiles.pesos&&!_biFiles.dolar&&!_biFiles.cable){
+    if(statusEl){statusEl.style.color='var(--red)';statusEl.textContent='Subí al menos un archivo primero.';}
+    return;
+  }
+  var res={compraventa:[],dividendos:[],ignorados:0};
+  ['pesos','dolar','cable'].forEach(function(k){
+    if(!_biFiles[k]) return;
+    var p=_biParseArchivo(_biFiles[k], k);
+    if(p.error){ if(statusEl){statusEl.style.color='var(--red)';statusEl.textContent='('+k+') '+p.error;} return; }
+    res.compraventa=res.compraventa.concat(p.compraventa);
+    res.dividendos=res.dividendos.concat(p.dividendos);
+    res.ignorados+=p.ignorados;
+  });
+
+  // Tickers nuevos (compra/venta) que no están en SECTOR_MAP ni tienen mercado ya elegido
+  var tickersSet={};
+  res.compraventa.forEach(function(m){ tickersSet[m.ticker]=true; });
+  var tickersNuevos=Object.keys(tickersSet).filter(function(t){ return !SECTOR_MAP[t] && !_biMercadoElegido[t]; }).sort();
+
+  _biParsed=res;
+  biRenderTickerForm(tickersNuevos);
+  biRenderPreview();
+}
+
+var BI_MERCADOS=[
+  {v:'ARGENTINA',l:'Argentina (acción)'},{v:'BONOS',l:'Bonos'},{v:'ON',l:'ON'},
+  {v:'USA',l:'NYSE / NASDAQ'},{v:'ETF',l:'ETF (USA)'},{v:'BRASIL',l:'Brasil'},
+  {v:'EUROPA',l:'Europa'},{v:'CHINA',l:'China'},{v:'CRIPTO',l:'Cripto'},{v:'FCI',l:'FCI'}
+];
+function biRenderTickerForm(tickersNuevos){
+  var wrap=document.getElementById('bi-tickers-wrap');
+  var tbody=document.getElementById('bi-tickers-tbody');
+  if(!tickersNuevos.length){ wrap.style.display='none'; tbody.innerHTML=''; return; }
+  wrap.style.display='block';
+  tbody.innerHTML=tickersNuevos.map(function(t){
+    return '<div style="display:flex;align-items:center;gap:10px">'
+      +'<span style="font-family:var(--mono);font-weight:700;width:70px">'+t+'</span>'
+      +'<select onchange="biSetMercado(\''+t+'\',this.value)" style="flex:1;max-width:220px">'
+      +'<option value="">— elegí mercado —</option>'
+      +BI_MERCADOS.map(function(m){return '<option value="'+m.v+'">'+m.l+'</option>';}).join('')
+      +'</select></div>';
+  }).join('');
+}
+function biSetMercado(ticker,val){
+  if(val) _biMercadoElegido[ticker]=val; else delete _biMercadoElegido[ticker];
+  biRenderPreview();
+}
+
+function _biMercadoDe(ticker){
+  if(_biMercadoElegido[ticker]) return _biMercadoElegido[ticker];
+  var sec=SECTOR_MAP[ticker];
+  var rev={bonos:'BONOS',on:'ON',argentina:'ARGENTINA',brasil:'BRASIL',nyse:'USA',fci:'FCI',europa:'EUROPA',china:'CHINA',cripto:'CRIPTO'};
+  return sec?rev[sec]:null;
+}
+
+function biRenderPreview(){
+  var el=document.getElementById('bi-preview');
+  if(!_biParsed){ el.innerHTML=''; return; }
+  var faltanMercado=_biParsed.compraventa.filter(function(m){return !_biMercadoDe(m.ticker);});
+  var faltanPrecio=_biParsed.compraventa.filter(function(m){return m.precio==null||isNaN(m.precio);});
+  var faltanCCL=_biParsed.compraventa.filter(function(m){
+    var mkt=_biMercadoDe(m.ticker); if(!mkt) return false;
+    return !getTC(m.fecha,mkt);
+  });
+  var nCompras=_biParsed.compraventa.filter(function(m){return m.tipo==='compra';}).length;
+  var nVentas=_biParsed.compraventa.filter(function(m){return m.tipo==='venta';}).length;
+
+  var html='<div class="tw panel-table" style="margin-top:.5rem"><table><thead><tr><th>Detectado</th><th>Cantidad</th></tr></thead><tbody>'
+    +'<tr><td>Compras</td><td class="mono">'+nCompras+'</td></tr>'
+    +'<tr><td>Ventas</td><td class="mono">'+nVentas+'</td></tr>'
+    +'<tr><td>Dividendos/cupones (van a "Pendientes de revisión")</td><td class="mono">'+_biParsed.dividendos.length+'</td></tr>'
+    +'<tr><td>Filas ignoradas (caución, transferencias, retenciones, etc.)</td><td class="mono">'+_biParsed.ignorados+'</td></tr>'
+    +'</tbody></table></div>';
+
+  if(faltanMercado.length){
+    html+='<div style="color:var(--amber);font-size:.72rem;margin-top:8px">⚠ Faltan '+new Set(faltanMercado.map(function(m){return m.ticker;})).size+' ticker(s) sin mercado elegido arriba — no se pueden importar hasta clasificarlos.</div>';
+  }
+  if(faltanPrecio.length){
+    html+='<div style="color:var(--red);font-size:.72rem;margin-top:4px">✗ '+faltanPrecio.length+' fila(s) sin precio cargado en el Excel (columna Precio vacía) — no se pueden importar. Revisá el archivo original.</div>';
+  }
+  if(faltanCCL.length){
+    html+='<div style="color:var(--amber);font-size:.72rem;margin-top:4px">⚠ '+faltanCCL.length+' fila(s) sin CCL/MEP cargado para esa fecha — se van a importar igual usando el tipo de cambio más reciente disponible como aproximación.</div>';
+  }
+
+  var puedeImportar = !faltanMercado.length && !faltanPrecio.length && (nCompras+nVentas+_biParsed.dividendos.length)>0;
+  html+='<button class="btn btn-a btn-sm" style="margin-top:10px" '+(puedeImportar?'':'disabled')+' onclick="biConfirmarImport()">Confirmar importación</button>';
+  el.innerHTML=html;
+}
+
+function biConfirmarImport(){
+  if(!_biParsed) return;
+  var statusEl=document.getElementById('bi-status');
+  var nuevosMov=[];
+  var errores=[];
+
+  _biParsed.compraventa.forEach(function(m){
+    var mkt=_biMercadoDe(m.ticker);
+    if(!mkt){ errores.push(m.ticker+': sin mercado'); return; }
+    var esBonoON=(mkt==='BONOS'||mkt==='ON');
+    var esParidadUSD=(m.origenMoneda==='dolar'); // COMPRA/VENTA PARIDAD: precio ya viene en USD directo
+
+    var precioARS, precioUSD, cclVal, ratio=getRatio(m.ticker);
+
+    if(esParidadUSD){
+      // Precio real en dólares (paridad). Se reconstruye un precioARS "espejo" = precioUSD*CCL
+      // del día para que el motor de cálculo (getPositions, que siempre re-divide precioARS por
+      // el CCL de la fecha) reproduzca el mismo precioUSD tanto en compra como en venta.
+      cclVal=getTC(m.fecha,mkt)||CCL_HOY;
+      precioUSD=m.precio;
+      precioARS=cclVal?precioUSD*cclVal:precioUSD;
+    } else {
+      precioARS=esBonoON?(m.precio/100):m.precio;
+      cclVal=getTC(m.fecha,mkt)||CCL_HOY;
+      precioUSD=isBonoUSDDirecto(m.ticker)?precioARS:(cclVal?precioARS*ratio/cclVal:null);
+    }
+
+    nuevosMov.push({
+      id:Date.now()+Math.floor(Math.random()*100000), fecha:m.fecha, tipo:m.tipo, mercado:mkt,
+      ticker:m.ticker, qty:m.qty, precioARS:precioARS, ccl:cclVal, ratio:ratio, precioUSD:precioUSD,
+      comision:0, comisionPct:0, notas:'Importado desde Bull Market ('+m.comprobante+')',
+      finish:false, owner:undefined, loteMethod: m.tipo==='venta' ? 'promedio' : undefined
+    });
+  });
+
+  if(errores.length){
+    statusEl.style.color='var(--red)';
+    statusEl.textContent='No se importó nada — faltan datos: '+errores.slice(0,5).join(', ')+(errores.length>5?'…':'');
+    return;
+  }
+
+  nuevosMov.forEach(function(m){ movimientos.push(m); });
+  var divResult=_biParsed.dividendos.length ? trkQueuePendingRows(_biParsed.dividendos) : {added:0,dup:0};
+
+  if(nuevosMov.length) saveAndRender();
+
+  statusEl.style.color='var(--accent)';
+  statusEl.textContent='✓ Importado: '+nuevosMov.length+' movimiento(s) de compra/venta. '
+    +divResult.added+' dividendo(s)/cupón(es) puesto(s) en "Pendientes de revisión" (solapa Dividendos)'
+    +(divResult.dup?', '+divResult.dup+' ya existían y se omitieron':'')+'.';
+
+  document.getElementById('bi-preview').innerHTML='';
+  document.getElementById('bi-tickers-wrap').style.display='none';
+  _biParsed=null;
 }
 
 // ─── CCL Implícito ───
