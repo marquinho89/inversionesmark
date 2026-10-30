@@ -1092,6 +1092,7 @@ function _biParseArchivo(rows, tipoArchivo){
         tipo: compraSet.indexOf(comp)>=0 ? 'compra':'venta',
         ticker: ticker, fecha: fechaDDMM,
         qty: Math.abs(cantidad)||0, precio: isNaN(precio)?null:precio,
+        importe: (function(){var n=typeof r[iImporte]==='number'?r[iImporte]:parseFloat(r[iImporte]);return isNaN(n)?null:Math.abs(n);})(),
         origenMoneda: tipoArchivo, comprobante: comp
       });
     } else if(divSet.indexOf(comp)>=0){
@@ -1325,7 +1326,13 @@ function biConfirmarImport(){
       precioUSD=(mkt==='BONOS'||mkt==='ON'||mkt==='FCI'||isBonoUSDDirecto(m.ticker))?m.precio:m.precio*(ratio||1);
       precioARS=cclVal?m.precio*cclVal:m.precio;
     } else {
-      precioARS=esBonoON?(m.precio/100):m.precio;
+      precioARS=m.precio;
+      if(esBonoON){
+        // Bull informa el precio de los bonos por 100 VN en algunos casos y por 1 VN en otros. Se elige la escala
+        // (precio/100 o precio) que más se acerca al Importe ÷ Cantidad de la propia fila.
+        var _a=m.precio/100,_pn=(m.importe>0&&m.qty>0)?m.importe/m.qty:null;
+        precioARS=(_pn&&_a>0&&m.precio>0&&Math.abs(Math.log(m.precio/_pn))<Math.abs(Math.log(_a/_pn)))?m.precio:_a;
+      }
       cclVal=getTC(m.fecha,mkt)||CCL_HOY;
       precioUSD=isBonoUSDDirecto(m.ticker)?precioARS:(cclVal?precioARS*ratio/cclVal:null);
     }
