@@ -1142,9 +1142,62 @@ async function biProcesar(){
   }
   var tickersNuevos=Object.keys(tickersSet).filter(function(t){ return !SECTOR_MAP[t] && !_biMercadoElegido[t]; }).sort();
 
+  // Omitir lo que ya está cargado (misma fecha, tipo, ticker y cantidad), así se puede pegar o subir un rango que se superponga.
+  var _ex={};
+  movimientos.forEach(function(x){ if(!x||!x.fecha)return; var k=[x.fecha,x.tipo,String(x.ticker||'').toUpperCase(),Math.round((+x.qty||0)*10000)].join('|'); _ex[k]=(_ex[k]||0)+1; });
+  res.omitidos=0;
+  res.compraventa=res.compraventa.filter(function(m){
+    var k=[m.fecha,m.tipo,m.ticker,Math.round((+m.qty||0)*10000)].join('|');
+    if(_ex[k]>0){ _ex[k]--; res.omitidos++; return false; }
+    return true;
+  });
   _biParsed=res;
   biRenderTickerForm(tickersNuevos);
   biRenderPreview();
+}
+
+// ─── Pegar desde Bull Market ───
+// Número en formato argentino ("1.234,56"), inglés ("1,234.56") o ya numérico.
+function _biNum(v){
+  if(typeof v==='number')return v;
+  var s=String(v==null?'':v).replace(/[^\d.,\-]/g,'');
+  if(!s||s==='-')return null;
+  var c=s.lastIndexOf(','),d=s.lastIndexOf('.');
+  if(c>=0&&d>=0){ s=(c>d)?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,''); }
+  else if(c>=0){ s=s.replace(',','.'); }
+  else if(d>=0&&/^-?\d{1,3}(\.\d{3})+$/.test(s)){ s=s.replace(/\./g,''); }
+  var n=parseFloat(s);return isNaN(n)?null:n;
+}
+function _biFechaTexto(v){
+  var s=String(v==null?'':v).trim(),m;
+  if((m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/)))return new Date(+m[3],+m[2]-1,+m[1]);
+  if((m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)))return new Date(+m[1],+m[2]-1,+m[3]);
+  return v;
+}
+function _biPegarARows(texto){
+  var rows=String(texto||'').split(/\r?\n/).map(function(l){return l.replace(/\s+$/,'');}).filter(function(l){return l.trim();})
+    .map(function(l){return (l.indexOf('\t')>=0?l.split('\t'):l.split(/\s{2,}/)).map(function(c){return c.trim();});});
+  if(!rows.length)return rows;
+  var tieneHdr=rows[0].length>2&&String(rows[0][2]).toLowerCase()==='comprobante';
+  var datos=tieneHdr?rows.slice(1):rows;
+  datos=datos.filter(function(r){return r.length>=6;}).map(function(r){
+    r=r.slice();
+    r[0]=_biFechaTexto(r[0]);r[1]=_biFechaTexto(r[1]);
+    [4,6,7,8].forEach(function(i){ if(r[i]!==undefined&&r[i]!=='')r[i]=_biNum(r[i]); });
+    return r;
+  });
+  return [['Liquida','Operado','Comprobante','Numero','Cantidad','Especie','Precio','Importe','Saldo','Referencia']].concat(datos);
+}
+async function biPegarProcesar(){
+  var st=document.getElementById('bi-status'),ta=document.getElementById('bi-paste-text'),sel=document.getElementById('bi-paste-moneda');
+  var rows=_biPegarARows(ta?ta.value:'');
+  if(rows.length<2){ if(st){st.style.color='var(--red)';st.textContent='No encontré filas para importar. Copiá la tabla de Bull Market (con las columnas Liquida, Operado, Comprobante, Numero, Cantidad, Especie, Precio, Importe…) y pegala acá.';} return; }
+  var tipo=sel?sel.value:'auto';
+  if(tipo==='auto'){ tipo=rows.some(function(r){return /PARIDAD/i.test(String(r[2]||''));})?'dolar':'pesos'; }
+  _biFiles={pesos:null,dolar:null,cable:null}; _biFiles[tipo]=rows;
+  _biPending={pesos:null,dolar:null,cable:null};
+  ['pesos','dolar','cable'].forEach(function(k){var n=document.getElementById('bi-'+k+'-name');if(n)n.textContent=(k===tipo)?('Pegado ('+(rows.length-1)+' filas)'):'Sin archivo';});
+  await biProcesar();
 }
 
 var BI_MERCADOS=[
@@ -1193,6 +1246,7 @@ function biRenderPreview(){
   var html='<div class="tw panel-table" style="margin-top:.5rem"><table><thead><tr><th>Detectado</th><th>Cantidad</th></tr></thead><tbody>'
     +'<tr><td>Compras</td><td class="mono">'+nCompras+'</td></tr>'
     +'<tr><td>Ventas</td><td class="mono">'+nVentas+'</td></tr>'
+    +(_biParsed.omitidos?'<tr><td>Ya cargadas en tus movimientos (se omiten)</td><td class="mono">'+_biParsed.omitidos+'</td></tr>':'')
     +'<tr><td>Dividendos/cupones (van a "Pendientes de revisión")</td><td class="mono">'+_biParsed.dividendos.length+'</td></tr>'
     +'<tr><td>Filas ignoradas (caución, transferencias, retenciones, etc.)</td><td class="mono">'+_biParsed.ignorados+'</td></tr>'
     +'</tbody></table></div>';

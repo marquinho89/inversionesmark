@@ -1157,6 +1157,18 @@ html.nv-pre #page-portafolio::before{content:"Cargando cartera…";display:block
             </div>
             <button class="btn btn-a btn-sm" onclick="biProcesar()" style="margin-left:auto">Procesar archivos</button>
           </div>
+          <div style="margin-bottom:1rem;padding:.7rem .8rem;border:1px solid var(--border2);border-radius:var(--rsm)">
+            <div style="font-size:.72rem;color:var(--text2);margin-bottom:6px">
+              <b>O pegá las operaciones</b> copiadas de la tabla de Cuenta Corriente de Bull Market (seleccioná las filas en la web, copiá y pegá acá). Lo que ya tengas cargado se omite solo.
+            </div>
+            <textarea id="bi-paste-text" rows="5" placeholder="Liquida&#9;Operado&#9;Comprobante&#9;Numero&#9;Cantidad&#9;Especie&#9;Precio&#9;Importe&#9;Saldo&#9;Referencia" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-family:var(--mono);font-size:.68rem;padding:6px 8px"></textarea>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:6px;flex-wrap:wrap">
+              <select id="bi-paste-moneda" style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-family:var(--mono);font-size:.72rem;padding:4px 6px">
+                <option value="auto">Moneda: automática</option><option value="pesos">Pesos</option><option value="dolar">Dólar</option><option value="cable">Dólar Cable</option>
+              </select>
+              <button class="btn btn-a btn-sm" onclick="biPegarProcesar()">Procesar lo pegado</button>
+            </div>
+          </div>
           <div id="bi-tickers-wrap" style="display:none;margin-bottom:1rem">
             <div style="font-size:.72rem;color:var(--text2);margin-bottom:8px">
               Encontré tickers que no tengo clasificados todavía. Elegí el mercado de cada uno antes de importar (afecta cómo se calcula el costo/PPC):
@@ -1248,7 +1260,7 @@ window.PORTFOLIO_CONFIG={
 };
 </script>
 <script src="../comun/datos.js?d=8"></script>
-<script src="../comun/portafolio.js?v=2823"></script>
+<script src="../comun/portafolio.js?v=2824"></script>
 <script>
 (function(){
   var LS_KEY='ptMarcos_inicio';
