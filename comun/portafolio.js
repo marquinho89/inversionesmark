@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2832, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2833, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2833 | 2026-10-30 | El botón de modo negro aparece también en la vista nueva.',
   'v2832 | 2026-10-30 | Avisos push (movimientos grandes, precio objetivo, resumen diario) y modo negro.',
   'v2831 | 2026-10-30 | Se elimina la migración de historial y la credencial de la base de origen.',
   'v2830 | 2026-10-30 | Importador unificado, menú Mantenimiento y versión real.',
@@ -11295,7 +11296,7 @@ function nvRender(){
   try{var stb=document.getElementById('sidebar-toggle-btn'),nimg=document.getElementById('nv-img');if(stb&&nimg){var mb=stb.cloneNode(true);mb.id='nv-menu-btn';mb.style.width='34px';mb.style.height='34px';mb.style.fontSize='1.05rem';nimg.parentNode.insertBefore(mb,nimg);}}catch(e){}
   try{var nt=root.querySelector('.nvtop'),tw=document.createElement('div');tw.id='nv-tools';tw.style.cssText='margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap';nt.appendChild(tw);
    var mv=function(){var kb=document.getElementById('kb-btn'),nb0=document.getElementById('nv-tb0');var qw=document.getElementById('nv-q');qw=qw&&qw.parentNode;if(nb0&&qw&&nb0.lastElementChild!==(kb||qw)){nb0.appendChild(qw);if(kb){kb.style.marginLeft='6px';nb0.appendChild(kb);}}
-    ['cartera-activa-badge','port-eye-btn','lupd','sb-status','push-btn','sync-btn','bk-btn'].forEach(function(id){var e=document.getElementById(id);if(e&&e.parentNode!==tw)tw.appendChild(e);});
+    ['cartera-activa-badge','port-eye-btn','lupd','sb-status','tema-btn','push-btn','sync-btn','bk-btn'].forEach(function(id){var e=document.getElementById(id);if(e&&e.parentNode!==tw)tw.appendChild(e);});
     var cb=document.querySelector('.hright button[onclick$="EnComparacion()"]');if(cb&&cb.parentNode!==tw)tw.appendChild(cb);
     var ab=document.querySelector('button[onclick="fetchAllQuotes()"]');if(ab&&ab.parentNode!==tw){tw.appendChild(ab);Array.prototype.slice.call(ab.childNodes).forEach(function(n){if(n.nodeType===3)n.remove();});ab.title='Actualizar precios';ab.className='btn btn-a';ab.style.cssText='padding:0 9px;font-size:.95rem;min-width:0';}};
    mv();setTimeout(mv,1500);setTimeout(mv,5000);}catch(e){}
