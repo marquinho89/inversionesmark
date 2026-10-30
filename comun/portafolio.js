@@ -1211,6 +1211,108 @@ async function biPegarProcesar(){
   await biProcesar();
 }
 
+// ════════════════════════════════════════════════════════
+// CONCILIAR CON BULL — compara tu tenencia de Bull Market con la de la página y propone
+// movimientos de ajuste (con precio ESTIMADO) para que las cantidades y el PPC coincidan.
+// ════════════════════════════════════════════════════════
+var _cnProp=[];
+// Lee la tabla de tenencias copiada de Bull: ticker, (nombre), cantidad, precio, var%, var$, PPC, ...
+function _cnParseBull(texto){
+  var out=[],pend=null;
+  String(texto||'').split(/\r?\n/).forEach(function(raw){
+    var l=raw.replace(/\s+$/,'');if(!l.trim())return;
+    var cells=l.split('\t').map(function(c){return c.trim();});
+    var qi=-1;
+    for(var i=0;i<cells.length;i++){ if(/^-?[\d.,]+$/.test(cells[i])&&/\d/.test(cells[i])){qi=i;break;} }
+    if(qi>=0&&cells.length>=qi+5){
+      var tk=pend;
+      if(qi>0&&/^[A-Z][A-Z0-9.]{1,9}$/.test(cells[0]))tk=cells[0];
+      if(tk){
+        var q=_biNum(cells[qi]);
+        if(q!=null&&q>0)out.push({ticker:tk,qty:q,precio:_biNum(cells[qi+1]),ppc:_biNum(cells[qi+4])});
+      }
+      pend=null;return;
+    }
+    if(cells.length===1&&/^[A-Z][A-Z0-9.]{1,9}$/.test(cells[0])&&!pend)pend=cells[0];
+  });
+  return out;
+}
+function _cnFechaMas(f,dias){
+  var p=String(f||'').split('/');var d=new Date(+p[2],+p[1]-1,+p[0]);d.setDate(d.getDate()+dias);
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+}
+function _cnFechaNum(f){var p=String(f||'').split('/');return p.length===3?+p[2]*10000+ +p[1]*100+ +p[0]:99999999;}
+async function cnComparar(){
+  var st=document.getElementById('cn-status'),out=document.getElementById('cn-out');
+  var bull=_cnParseBull((document.getElementById('cn-text')||{}).value);
+  if(!bull.length){ if(st){st.style.color='var(--red)';st.textContent='No encontré tenencias. Copiá la tabla de tu cartera de Bull (ticker, cantidad, precio, PPC…) y pegala acá.';} return; }
+  if(st){st.style.color='var(--text2)';st.textContent='Comparando…';}
+  var pos={};getPositions().forEach(function(p){if(p.qty>0.000001)pos[p.ticker]=p;});
+  var bm={};bull.forEach(function(b){bm[b.ticker]=b;});
+  var tks={};Object.keys(pos).forEach(function(t){tks[t]=1;});bull.forEach(function(b){tks[b.ticker]=1;});
+  var hoy=(function(){var d=new Date();return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();})();
+  var minGlobal=movimientos.reduce(function(a,m){var n=_cnFechaNum(m&&m.fecha);return n<a?n:a;},99999999);
+  _cnProp=[];
+  var lista=Object.keys(tks).sort();
+  for(var i=0;i<lista.length;i++){
+    var t=lista[i],p=pos[t],b=bm[t];
+    var sec=getSector(t),bono=(sec==='bonos'||sec==='on'),esc=bono?100:1;
+    if(isBonoUSDDirecto(t)){ continue; }
+    var qp=p?p.qty:0,qb=b?b.qty:0,dif=Math.round((qb-qp)*1e6)/1e6;
+    if(Math.abs(dif)<0.5)continue;
+    var unitP=p&&p.qty>0?p.costARS/p.qty:0;                       // costo promedio de la página, por unidad
+    var ppcB=b?((b.ppc>0?b.ppc:b.precio)||0)/esc:0;                // PPC de Bull, por unidad
+    var mk=null;for(var j=movimientos.length-1;j>=0;j--){var mm=movimientos[j];if(mm&&mm.ticker===t&&mm.mercado&&mm.mercado!=='—'){mk=mm.mercado;break;}}
+    if(!mk){try{var dd=await mktDetectar(t);mk=dd&&dd.mkt;}catch(e){}}
+    var prop={ticker:t,mercado:mk,qtyPag:qp,qtyBull:qb,dif:dif,aplicar:!!mk};
+    if(dif>0){
+      var est=(qp>0&&unitP>0)?(ppcB*qb-unitP*qp)/dif:ppcB;
+      var modo='precio estimado para igualar el PPC de Bull';
+      if(!(est>0)||est>ppcB*3||est<ppcB/3){ est=ppcB; modo='PPC de Bull (el promedio no cierra)'; }
+      var fe=null;movimientos.forEach(function(m){if(m&&m.ticker===t&&m.fecha&&(fe==null||_cnFechaNum(m.fecha)<_cnFechaNum(fe)))fe=m.fecha;});
+      prop.tipo='compra';prop.qty=dif;prop.precio=est;prop.modo=modo;
+      prop.fecha=fe?_cnFechaMas(fe,-1):_cnFechaMas('01/01/'+(Math.floor(minGlobal/10000)||new Date().getFullYear()),-1);
+    } else {
+      prop.tipo='venta';prop.qty=-dif;prop.precio=unitP>0?unitP:ppcB;prop.fecha=hoy;
+      prop.modo=b?'venta al costo promedio (sin ganancia ni pérdida)':'no está en Bull: se cierra al costo promedio';
+    }
+    if(!(prop.precio>0))prop.aplicar=false;
+    _cnProp.push(prop);
+  }
+  cnRender();
+  if(st){st.style.color='var(--text2)';st.textContent=_cnProp.length?_cnProp.length+' diferencia(s) encontradas. Revisá y aplicá.':'✓ Las cantidades coinciden con Bull.';}
+}
+function cnRender(){
+  var out=document.getElementById('cn-out');if(!out)return;
+  if(!_cnProp.length){out.innerHTML='';return;}
+  var f=function(n,d){return (n==null||isNaN(n))?'—':n.toLocaleString('es-AR',{maximumFractionDigits:d==null?2:d});};
+  var h='<div class="tw panel-table" style="margin-top:.5rem"><table><thead><tr><th></th><th>Ticker</th><th>Página</th><th>Bull</th><th>Ajuste</th><th>Precio (est.)</th><th>Fecha</th><th>Cómo se calcula</th></tr></thead><tbody>';
+  _cnProp.forEach(function(p,i){
+    var bono=(getSector(p.ticker)==='bonos'||getSector(p.ticker)==='on');
+    h+='<tr><td><input type="checkbox" '+(p.aplicar?'checked ':'')+(p.mercado?'':'disabled ')+'onchange="_cnProp['+i+'].aplicar=this.checked"></td>'
+     +'<td class="mono"><b>'+p.ticker+'</b></td><td class="mono">'+f(p.qtyPag,0)+'</td><td class="mono">'+f(p.qtyBull,0)+'</td>'
+     +'<td class="mono" style="color:'+(p.tipo==='compra'?'var(--accent)':'var(--red)')+'">'+p.tipo+' '+f(p.qty,0)+'</td>'
+     +'<td class="mono">$'+f(bono?p.precio*100:p.precio,2)+(bono?' /100':'')+'</td><td class="mono">'+p.fecha+'</td>'
+     +'<td style="font-size:.66rem;color:var(--text3)">'+p.modo+(p.mercado?'':' · <span style="color:var(--amber)">falta mercado</span>')+'</td></tr>';
+  });
+  h+='</tbody></table></div><button class="btn btn-a btn-sm" style="margin-top:10px" onclick="cnAplicar()">Aplicar ajustes marcados</button>'
+    +'<div style="font-size:.68rem;color:var(--text3);margin-top:6px">Los movimientos quedan con la nota "Ajuste estimado (conciliación con Bull)" para poder encontrarlos y borrarlos.</div>';
+  out.innerHTML=h;
+}
+function cnAplicar(){
+  var base=Date.now(),n=0,st=document.getElementById('cn-status');
+  _cnProp.forEach(function(p){
+    if(!p.aplicar||!p.mercado||!(p.precio>0))return;
+    var ratio=getRatio(p.ticker),tc=getTC(p.fecha,p.mercado)||CCL_HOY;
+    var usd=isBonoUSDDirecto(p.ticker)?p.precio:(tc?p.precio*ratio/tc:null);
+    movimientos.push({id:base+(n++),fecha:p.fecha,tipo:p.tipo,mercado:p.mercado,ticker:p.ticker,qty:p.qty,precioARS:p.precio,ccl:tc,ratio:ratio,precioUSD:usd,
+      comision:0,comisionPct:0,notas:'Ajuste estimado (conciliación con Bull)',finish:false,owner:undefined,loteMethod:p.tipo==='venta'?'promedio':undefined});
+  });
+  if(!n){ if(st){st.style.color='var(--amber)';st.textContent='No hay ajustes marcados para aplicar.';} return; }
+  saveAndRender();_cnProp=[];cnRender();
+  if(st){st.style.color='var(--accent)';st.textContent='✓ Se aplicaron '+n+' ajuste(s). Volvé a comparar para verificar que no queden diferencias.';}
+}
+
 var BI_MERCADOS=[
   {v:'ARGENTINA',l:'Argentina (acción)'},{v:'BONOS',l:'Bonos'},{v:'ON',l:'ON'},
   {v:'USA',l:'NYSE / NASDAQ'},{v:'ETF',l:'ETF (USA)'},{v:'BRASIL',l:'Brasil'},

@@ -1169,6 +1169,15 @@ html.nv-pre #page-portafolio::before{content:"Cargando cartera…";display:block
               <button class="btn btn-a btn-sm" onclick="biPegarProcesar()">Procesar lo pegado</button>
             </div>
           </div>
+          <div style="margin-bottom:1rem;padding:.7rem .8rem;border:1px solid var(--border2);border-radius:var(--rsm)">
+            <div style="font-size:.72rem;color:var(--text2);margin-bottom:6px">
+              <b>Conciliar con tu cartera de Bull:</b> pegá la tabla de tenencias de Bull (ticker, cantidad, precio, PPC…). Compara con la página y propone movimientos de ajuste con <b>precio estimado</b> (parte que falta o sobra), para que cantidades y PPC queden iguales. Revisás y aplicás vos.
+            </div>
+            <textarea id="cn-text" rows="5" placeholder="Pegá acá las tenencias de Bull (Acciones, Cedears, Bonos…)" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-family:var(--mono);font-size:.68rem;padding:6px 8px"></textarea>
+            <div style="margin-top:6px"><button class="btn btn-a btn-sm" onclick="cnComparar()">Comparar con Bull</button></div>
+            <div id="cn-status" style="margin-top:8px;font-size:.72rem"></div>
+            <div id="cn-out"></div>
+          </div>
           <div id="bi-tickers-wrap" style="display:none;margin-bottom:1rem">
             <div style="font-size:.72rem;color:var(--text2);margin-bottom:8px">
               Encontré tickers que no tengo clasificados todavía. Elegí el mercado de cada uno antes de importar (afecta cómo se calcula el costo/PPC):
@@ -1260,7 +1269,7 @@ window.PORTFOLIO_CONFIG={
 };
 </script>
 <script src="../comun/datos.js?d=8"></script>
-<script src="../comun/portafolio.js?v=2826"></script>
+<script src="../comun/portafolio.js?v=2827"></script>
 <script>
 (function(){
   var LS_KEY='ptMarcos_inicio';
