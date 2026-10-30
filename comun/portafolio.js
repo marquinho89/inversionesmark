@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2833, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2834, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2834 | 2026-10-30 | Análisis de decisiones: excluye ajustes y vencimientos, efecto disposición (Odean), % por monto, comisión en el plan, grupos que explican la diferencia y opción de incluir extremos.',
   'v2833 | 2026-10-30 | El botón de modo negro aparece también en la vista nueva.',
   'v2832 | 2026-10-30 | Avisos push (movimientos grandes, precio objetivo, resumen diario) y modo negro.',
   'v2831 | 2026-10-30 | Se elimina la migración de historial y la credencial de la base de origen.',
@@ -11603,7 +11604,7 @@ var ROT_OCU=null,_rotCalc={};
 function _rotUSD(m){var bon=(m.mercado==='BONOS'||m.mercado==='ON'||m.mercado==='FCI'),tc=bon?(getMEP(m.fecha)||getCCL(m.fecha)||m.ccl||MEP_HOY||CCL_HOY):(getCCL(m.fecha)||m.ccl||CCL_HOY);
   return isBonoUSDDirecto(m.ticker)?(+m.precioARS||0)*m.qty:(tc>0&&(+m.precioARS||0)>0?(+m.precioARS)*m.qty/tc:(+m.precioUSD||0)*m.qty);}
 function rotDetectar(){var lim=new Date(Date.now()-200*864e5).toISOString().slice(0,10),T=[];
-  (movimientos||[]).forEach(function(m){if(!m||(m.tipo!=='compra'&&m.tipo!=='venta')||m.owner==='cristian')return;var f=_phIso(m.fecha);if(!f||f<lim)return;var u=_rotUSD(m);if(!(u>0)||!(m.qty>0))return;
+  (movimientos||[]).forEach(function(m){if(!m||(m.tipo!=='compra'&&m.tipo!=='venta')||m.owner==='cristian'||_decAuto(m))return;var f=_phIso(m.fecha);if(!f||f<lim)return;var u=_rotUSD(m);if(!(u>0)||!(m.qty>0))return;
     T.push({id:m.id,f:f,tp:m.tipo,t:m.ticker,q:+m.qty,u:u,c:m.cartera||'principal',s:getSector(m.ticker)});});
   T.sort(function(a,b){return a.f<b.f?-1:a.f>b.f?1:(+a.id||0)-(+b.id||0);});
   // Agrupa las ventas de un mismo día y cartera. Primero las empareja con compras del MISMO día; recién después, a las que
@@ -12158,12 +12159,15 @@ async function hdModal(t){var ov=document.getElementById('hd-ov');
   ov.innerHTML=h;}
 function hdCelda(t){var px=_hdPxARS(t),r=px?hdTIR(t,px):null;if(!r)return null;return '<span style="color:#fbbf24;font-weight:600;cursor:pointer" title="TIR en dólares ('+_hdTag(r)+'). Tocá para ver la curva y comparar." onclick="event.stopPropagation();hdModal(\''+t+'\')">'+(r.tir*100).toFixed(2)+'%</span>';}
 // ─── v263 🧠 Tus decisiones: sesgo como inversor y "si no vendías" (página de Rotaciones) ───
-var DEC={exc:null,per:6};
+var DEC={exc:null,per:6,ext:false};
+// Movimientos que NO son decisiones tuyas: ajustes estimados de la conciliación y vencimientos de bonos.
+function _decAuto(m){return /ajuste estimado|vencimiento/i.test(String((m&&m.notas)||''));}
+function decExt(){DEC.ext=!DEC.ext;decRender();}
 async function _decExcCargar(){if(DEC.exc!==null)return;try{DEC.exc=await sbGetConfig('dec_excluir');}catch(e){}
   if(!Array.isArray(DEC.exc))DEC.exc=(typeof CFG!=='undefined'&&false)?['XP']:[];}
 async function decExc(t,on){var i=DEC.exc.indexOf(t);if(on&&i<0)DEC.exc.push(t);if(!on&&i>=0)DEC.exc.splice(i,1);try{await sbSetConfig('dec_excluir',DEC.exc);}catch(e){}decRender();}
 function decPer(m){DEC.per=m;decRender();}
-function _decMovs(){return (movimientos||[]).filter(function(m){return m&&(m.tipo==='compra'||m.tipo==='venta')&&m.owner!=='cristian'&&(typeof CARTERA_ACTIVA==='undefined'||(m.cartera||'principal')===CARTERA_ACTIVA)&&DEC.exc.indexOf(m.ticker)<0;});}
+function _decMovs(){return (movimientos||[]).filter(function(m){return m&&(m.tipo==='compra'||m.tipo==='venta')&&m.owner!=='cristian'&&!_decAuto(m)&&(typeof CARTERA_ACTIVA==='undefined'||(m.cartera||'principal')===CARTERA_ACTIVA)&&DEC.exc.indexOf(m.ticker)<0;});}
 // Para cada venta: días promedio que tuviste lo vendido (fecha promedio de las compras abiertas) y su ganancia real (la del PPC).
 function _decVentas(){try{getPositions();}catch(e){}var by={},out=[];
   _decMovs().map(function(m){return {m:m,f:_phIso(m.fecha)};}).filter(function(x){return x.f;}).sort(function(a,b){return a.f<b.f?-1:a.f>b.f?1:(+a.m.id||0)-(+b.m.id||0);}).forEach(function(x){(by[x.m.ticker]=by[x.m.ticker]||[]).push(x);});
@@ -12175,7 +12179,7 @@ function _decSesgo(D){var hoy=new Date(),w=function(a,k,wk){var W=a.reduce(funct
   var V=D.V.filter(function(v){return v.gp!=null&&isFinite(v.gp)&&v.u>0;}),vg=V.filter(function(v){return v.gp>0;}),vp=V.filter(function(v){return v.gp<=0;});
   var seen={},O=(NV_ROWS||[]).filter(function(o){if(seen[o.t]||DEC.exc.indexOf(o.t)>=0||o.d==null)return false;seen[o.t]=1;return true;}).map(function(o){var L=D.lots[o.t]||[],tq=L.reduce(function(s,l){return s+l.q;},0);return {t:o.t,d:o.d,usd:o.usd||0,dias:tq>0?L.reduce(function(s,l){return s+l.q*(hoy-new Date(l.f))/864e5;},0)/tq:null};});
   var og=O.filter(function(o){return o.d>0;}),op=O.filter(function(o){return o.d<=0;}),odg=og.filter(function(o){return o.dias!=null;}),odp=op.filter(function(o){return o.dias!=null;});
-  return {nV:V.length,vg:{n:vg.length,dias:w(vg,'dias','u'),gp:w(vg,'gp','u'),rap:vg.filter(function(v){return v.dias<45;}).length},vp:{n:vp.length,dias:w(vp,'dias','u'),gp:w(vp,'gp','u')},
+  return {nV:V.length,uGan:vg.reduce(function(s,v){return s+v.u;},0),uPer:vp.reduce(function(s,v){return s+v.u;},0),vg:{n:vg.length,dias:w(vg,'dias','u'),gp:w(vg,'gp','u'),rap:vg.filter(function(v){return v.dias<45;}).length},vp:{n:vp.length,dias:w(vp,'dias','u'),gp:w(vp,'gp','u')},
     nO:O.length,og:{n:og.length,dias:w(odg,'dias','usd'),d:w(og,'d','usd')},op:{n:op.length,dias:w(odp,'dias','usd'),d:w(op,'d','usd')},largos:op.filter(function(o){return o.dias>365;}).sort(function(a,b){return a.d-b.d;})};}
 // "Si no vendías": valor de hoy de cada venta (precio de hoy en USD + cupones/dividendos que habría cobrado), agrupado por activo.
 function _decNoVend(D,meses){var lim=new Date();lim.setMonth(lim.getMonth()-meses);var L=_isoD(lim),hoy=new Date(),hoyS=hoy.toLocaleDateString('es-AR'),agg={};
@@ -12184,7 +12188,7 @@ function _decNoVend(D,meses){var lim=new Date();lim.setMonth(lim.getMonth()-mese
     var fake=Object.assign({},v.m,{fecha:hoyS,precioARS:bono?px/100:px,ccl:CCL_HOY}),cob=0;try{cob=_rotCobros({t:t,f:v.f}).u*v.q;}catch(e){}g.hoy+=_rotUSD(fake)+cob;});
   var held={};getPositions().forEach(function(p){if(p.qty>1e-6)held[p.ticker]=1;});
   return Object.keys(agg).map(function(k){var g=agg[k];g.dif=g.hoy-g.u;g.pct=g.u>0?(g.hoy/g.u-1)*100:0;g.re=!!held[k];
-    g.raro=!g.ok||!isFinite(g.pct)||Math.abs(g.pct)>60||((g.s==='bonos'||g.s==='on')&&Math.abs(g.pct)>20);return g;}).sort(function(a,b){return b.dif-a.dif;});}
+    g.raro=!g.ok||!isFinite(g.pct)||(!DEC.ext&&Math.abs(g.pct)>60)||((g.s==='bonos'||g.s==='on')&&Math.abs(g.pct)>20);return g;}).sort(function(a,b){return b.dif-a.dif;});}
 async function decRender(){var pg=document.getElementById('page-rotaciones');if(!pg)return;await _decExcCargar();
   if(typeof _LIVE912!=='undefined'&&!_LIVE912){try{var m=await _rotLive();if(m&&Object.keys(m).length){_LIVE912=m;_LIVE912ts=Date.now();}}catch(e){}}
   var el=document.getElementById('dec-card');if(!el){el=document.createElement('div');el.id='dec-card';pg.insertBefore(el,pg.firstChild);}
@@ -12193,8 +12197,8 @@ async function decRender(){var pg=document.getElementById('page-rotaciones');if(
   var pc=function(a,b){return a+b?Math.round(a/(a+b)*100):0;},exc=DEC.exc.length?DEC.exc.map(function(t){return '<span onclick="decExc(\''+t+'\',0)" title="Volver a contarlo" style="font-family:var(--mono);background:#448aff22;color:#93c5fd;border-radius:6px;padding:1px 7px;cursor:pointer">'+t+' ↺</span>';}).join(' '):'<span style="color:var(--text3)">nada</span>';
   var h='<div class="card" style="margin-bottom:1rem;padding:12px 14px"><div class="card-header" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 0 8px"><span class="card-title">🧠 Tu sesgo como inversor</span><span class="tag">'+S.nV+' ventas · '+S.nO+' posiciones abiertas</span><span style="margin-left:auto;font-size:.72rem;color:var(--text2)">No se cuentan: '+exc+'</span></div>';
   if(S.nV<5){h+='<div style="font-size:.78rem;color:var(--text3)">Todavía hay pocas ventas para sacar conclusiones.</div></div>';}
-  else{var pV=pc(S.vg.n,S.vp.n),pO=pc(S.op.n,S.og.n);
-    h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-bottom:10px">'+kb('Ventas con ganancia',pV+'%',S.vg.n+' de '+S.nV+' · promedio '+P1(S.vg.gp),'var(--accent)')+kb('Posiciones abiertas en pérdida',pO+'%',S.op.n+' de '+(S.op.n+S.og.n)+' · promedio '+P1(S.op.d),'var(--red)')+kb('Ganadoras vendidas antes de 45 días',S.vg.rap,'de '+S.vg.n+' ventas con ganancia','#f59e0b')+kb('Perdedoras con más de 1 año',S.largos.length,'esperando que vuelvan','var(--red)')+'</div>';
+  else{var pV=pc(S.vg.n,S.vp.n),pO=pc(S.op.n,S.og.n),pU=pc(S.uGan,S.uPer);
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-bottom:10px">'+kb('Ventas con ganancia',pV+'%',S.vg.n+' de '+S.nV+' · '+pU+'% por monto · prom. '+P1(S.vg.gp),'var(--accent)')+kb('Posiciones abiertas en pérdida',pO+'%',S.op.n+' de '+(S.op.n+S.og.n)+' · promedio '+P1(S.op.d),'var(--red)')+kb('Ganadoras vendidas antes de 45 días',S.vg.rap,'de '+S.vg.n+' ventas con ganancia','#f59e0b')+kb('Perdedoras con más de 1 año',S.largos.length,'esperando que vuelvan','var(--red)')+'</div>';
     var ses=pV>=70&&pO>=60;
     h+='<div style="background:var(--surface2);border-left:3px solid #a78bfa;border-radius:6px;padding:9px 12px;font-size:.8rem;line-height:1.6;margin-bottom:10px">'+(ses?'📌 Tenés el sesgo más común: <b>vendés lo que gana y te quedás con lo que pierde</b>. El '+pV+'% de tus ventas fueron con ganancia, pero el '+pO+'% de lo que te queda está en pérdida.':'📌 '+pV+'% de tus ventas fueron con ganancia y '+pO+'% de lo que te queda está en pérdida.')+(S.og.n?' Las ganadoras que vendiste las tuviste en promedio <b>'+Dd(S.vg.dias)+'</b>; las '+S.og.n+' que hoy están en ganancia las tenés hace <b>'+Dd(S.og.dias)+'</b> y rinden <b>'+P1(S.og.d)+'</b> en promedio.':'')+'</div>';
     var bar=function(a,b,la,lb){var t=a+b||1;return '<div style="display:flex;height:22px;border-radius:6px;overflow:hidden;font-family:var(--mono);font-size:.66rem;font-weight:700"><span style="width:'+(a/t*100)+'%;background:#22c55e;color:#04110a;display:flex;align-items:center;justify-content:center">'+(a/t>0.15?la:a)+'</span><span style="width:'+(b/t*100)+'%;background:#ef4444;color:#fff;display:flex;align-items:center;justify-content:center">'+(b/t>0.15?lb:b)+'</span></div>';};
@@ -12202,20 +12206,58 @@ async function decRender(){var pg=document.getElementById('page-rotaciones');if(
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px"><div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px"><div style="font-size:.78rem;color:var(--text2);margin-bottom:8px">Cuando vendés</div>'+bar(S.vg.n,S.vp.n,S.vg.n+' con ganancia',S.vp.n+' con pérdida')+'<div style="margin-top:8px"></div>'+rw('Ganadoras vendidas',Dd(S.vg.dias)+' · <b style="color:var(--accent)">'+P1(S.vg.gp)+'</b>')+rw('Perdedoras vendidas',Dd(S.vp.dias)+' · <b style="color:var(--red)">'+P1(S.vp.gp)+'</b>')+'</div>'+
       '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px"><div style="font-size:.78rem;color:var(--text2);margin-bottom:8px">Lo que te queda</div>'+bar(S.og.n,S.op.n,S.og.n+' en ganancia',S.op.n+' en pérdida')+'<div style="margin-top:8px"></div>'+rw('En ganancia',Dd(S.og.dias)+' · <b style="color:var(--accent)">'+P1(S.og.d)+'</b>')+rw('En pérdida',Dd(S.op.dias)+' · <b style="color:var(--red)">'+P1(S.op.d)+'</b>')+'</div></div>';
     if(S.largos.length)h+='<div style="margin-top:10px;font-size:.74rem;color:var(--text2)">Perdedoras que tenés hace más de un año: <span style="display:inline-flex;flex-wrap:wrap;gap:5px">'+S.largos.slice(0,12).map(function(o){return '<span style="font-family:var(--mono);font-size:.66rem;border-radius:6px;padding:2px 7px;background:#ef44441a;color:#fca5a5">'+o.t+' '+P1(o.d)+' · '+Math.round(o.dias)+' d</span>';}).join('')+(S.largos.length>12?'<span style="color:var(--text3);font-size:.66rem">+ '+(S.largos.length-12)+' más</span>':'')+'</span></div>';
-    h+='</div>';}
+    h+='<div id="dec-od" style="margin-top:10px"><div style="font-size:.74rem;color:var(--text3)">Calculando el efecto disposición…</div></div></div>';}
   // si no vendías
   var X=A.filter(function(g){return !g.raro;}),R=A.filter(function(g){return g.raro;}),u=X.reduce(function(s,g){return s+g.u;},0),d=X.reduce(function(s,g){return s+g.dif;},0),up=X.filter(function(g){return g.dif>0;}),dn=X.filter(function(g){return g.dif<0;});
   var seg='<span style="display:inline-flex;border:1px solid var(--border2);border-radius:999px;overflow:hidden;font-size:.66rem;font-family:var(--mono)">'+[1,3,6,12].map(function(m){var on=DEC.per===m;return '<span onclick="decPer('+m+')" style="padding:2px 10px;cursor:pointer;'+(on?'background:var(--blue,#448aff);color:#fff':'color:var(--text2)')+'">'+(m===12?'1 año':m+' mes'+(m>1?'es':''))+'</span>';}).join('')+'</span>';
-  h+='<div class="card" style="margin-bottom:1rem;padding:12px 14px"><div class="card-header" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 0 8px"><span class="card-title">🔁 Lo que hubiera pasado si no vendías</span>'+seg+'<span class="tag">valor de hoy de lo que vendiste + lo que habría cobrado</span></div>';
+  h+='<div class="card" style="margin-bottom:1rem;padding:12px 14px"><div class="card-header" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 0 8px"><span class="card-title">🔁 Lo que hubiera pasado si no vendías</span>'+seg+'<span onclick="decExt()" title="Las variaciones de más de 60% pueden ser splits o errores de precio, pero también las ventas que más importan" style="cursor:pointer;font-size:.66rem;font-family:var(--mono);border:1px solid var(--border2);border-radius:999px;padding:2px 10px;color:'+(DEC.ext?'var(--accent)':'var(--text2)')+'">'+(DEC.ext?'✓ incluye extremos (>60%)':'extremos (>60%) fuera')+'</span><span class="tag">valor de hoy de lo que vendiste + lo que habría cobrado</span></div>';
   if(!X.length)h+='<div style="font-size:.78rem;color:var(--text3)">Sin ventas en el período.</div>';
   else{var best=X[0],worst=X[X.length-1];
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px">'+kb('Vendiste','<span class="port-sensitive">USD '+N(u)+'</span>',X.length+' activos')+kb('Hoy valdría','<span class="port-sensitive">USD '+N(u+d)+'</span>',(d>=0?'+':'−')+'USD '+N(d)+' · '+P1(u?d/u*100:0),d>=0?'var(--accent)':'var(--red)')+kb('Siguieron subiendo',up.length,'vendiste temprano','var(--accent)')+kb('Bajaron después',dn.length,'acertaste','var(--red)')+'</div>';
     h+='<div style="background:var(--surface2);border-left:3px solid #a78bfa;border-radius:6px;padding:9px 12px;font-size:.8rem;line-height:1.6;margin-bottom:10px">📌 Si no vendías nada en '+(DEC.per===1?'el último mes':DEC.per===12?'el último año':'los últimos '+DEC.per+' meses')+' tendrías <b style="color:'+(d>=0?'var(--accent)':'var(--red)')+'">USD '+N(d)+' '+(d>=0?'más':'menos')+'</b>.'+(best.dif>0?' La venta que más te costó fue <b>'+best.t+'</b> (+USD '+N(best.dif)+' desde que la vendiste).':'')+(worst.dif<0?' La mejor fue <b>'+worst.t+'</b> (bajó USD '+N(worst.dif)+' después).':'')+'</div>';
     h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.76rem"><tr style="color:var(--text3);font-size:.58rem;text-transform:uppercase"><td style="padding:5px">Vendiste</td><td style="text-align:right;padding:5px">Última venta</td><td style="text-align:right;padding:5px">Cobraste USD</td><td style="text-align:right;padding:5px">Hoy valdría</td><td style="text-align:right;padding:5px">Diferencia</td><td></td><td></td></tr>'+
       X.map(function(g){var c=g.dif>=0?'var(--accent)':'var(--red)';return '<tr style="border-top:1px solid var(--border)"><td style="padding:6px 5px"><b>'+g.t+'</b>'+(g.re?' <span style="color:#448aff" title="Lo volviste a comprar">●</span>':'')+'</td><td style="text-align:right;color:var(--text3)">'+g.f.split('-').reverse().join('/')+'</td><td style="text-align:right" class="port-sensitive">'+N(g.u)+'</td><td style="text-align:right" class="port-sensitive">'+N(g.hoy)+'</td><td style="text-align:right;color:'+c+'" class="port-sensitive">'+(g.dif>=0?'+':'−')+N(g.dif)+'</td><td style="text-align:right;color:'+c+'">'+P1(g.pct)+'</td><td style="text-align:right"><span onclick="decExc(\''+g.t+'\',1)" title="No contar este activo (fue una decisión a propósito)" style="cursor:pointer;color:var(--text3)">✕</span></td></tr>';}).join('')+'</table></div>';
-    h+='<div style="font-size:.66rem;color:var(--text3);margin-top:6px;line-height:1.5">Verde = después de vender subió (te perdiste esa suba) · rojo = bajó (acertaste) · ● = lo volviste a comprar · ✕ = no contarlo (también sale del sesgo).'+(R.length?' Sin dato confiable (precio que no cierra, revisar): '+R.map(function(g){return g.t;}).join(', ')+'.':'')+'</div>';}
-  el.innerHTML=h+'</div>';}
+    h+='<div style="font-size:.66rem;color:var(--text3);margin-top:6px;line-height:1.5">Verde = después de vender subió (te perdiste esa suba) · rojo = bajó (acertaste) · ● = lo volviste a comprar · ✕ = no contarlo (también sale del sesgo). Qué hiciste con esa plata: mirá la tabla de Rotaciones, más abajo.'+(R.length?' Sin dato confiable (precio que no cierra, revisar): '+R.map(function(g){return g.t;}).join(', ')+'.':'')+'</div>';}
+  el.innerHTML=h+'</div>';_decOdeanFill();}
 (function(){var _rr=rotRender;rotRender=async function(){var pr=_rr.apply(this,arguments);for(var i=0;i<40&&!document.getElementById('rot-tot');i++)await new Promise(function(r){setTimeout(r,100);});try{await decRender();}catch(e){console.warn('dec',e);}return pr;};})();
+
+// Efecto disposición (Odean 1998): en cada día con ventas, entre lo que tenías, cuánto de lo que estaba en ganancia vendiste (PGR)
+// frente a cuánto de lo que estaba en pérdida vendiste (PLR). PGR bien por encima de PLR = vendés ganadoras antes que perdedoras.
+var _decOdCache=null;
+async function _decOdean(){
+  var M=_decMovs().map(function(m){return {m:m,f:_phIso(m.fecha),t:m.ticker,q:+m.qty,tp:m.tipo,u:_rotUSD(m)};}).filter(function(x){return x.f&&x.q>0&&x.u>0;})
+    .sort(function(a,b){return a.f<b.f?-1:a.f>b.f?1:(+a.m.id||0)-(+b.m.id||0);});
+  if(M.length<5)return null;
+  var tks=[];M.forEach(function(x){if(tks.indexOf(x.t)<0)tks.push(x.t);});
+  var ser={},cola=tks.slice();
+  var tr=async function(){while(cola.length){var tk=cola.shift();try{var s=getSector(tk);ser[tk]=(s==='fci')?null:(await _phSerie(tk,s)).ser;}catch(e){ser[tk]=null;}}};
+  await Promise.all([tr(),tr(),tr(),tr()]);
+  var k={};tks.forEach(function(tk){var S=ser[tk];if(!S||!S.length){k[tk]=null;return;}var R=[];
+    M.forEach(function(x){if(x.t!==tk)return;var px=_hpPx(S,x.f);if(px>0)R.push(x.u/x.q/px);});
+    if(!R.length){k[tk]=1;return;}R.sort(function(a,b){return a-b;});k[tk]=Math.pow(10,Math.round(Math.log10(R[Math.floor(R.length/2)])));});
+  var pos={},RG=0,RL=0,PG=0,PL=0,dias=0,i=0;
+  while(i<M.length){var f=M[i].f,j=i;while(j<M.length&&M[j].f===f)j++;var dia=M.slice(i,j),vend={};
+    dia.forEach(function(x){if(x.tp==='venta'){var v=vend[x.t]||(vend[x.t]={q:0,u:0});v.q+=x.q;v.u+=x.u;}});
+    if(Object.keys(vend).length){dias++;
+      Object.keys(pos).forEach(function(tk){var P=pos[tk];if(!(P.q>1e-6)||!(P.c>0))return;var avg=P.c/P.q;
+        if(vend[tk]){var su=vend[tk].u/vend[tk].q;if(su>avg*1.005)RG++;else if(su<avg*0.995)RL++;}
+        else{var px=ser[tk]&&k[tk]?_hpPx(ser[tk],f):null;if(!(px>0))return;var pu=px*k[tk];if(pu>avg*1.005)PG++;else if(pu<avg*0.995)PL++;}});}
+    dia.forEach(function(x){var P=pos[x.t]||(pos[x.t]={q:0,c:0});
+      if(x.tp==='compra'){P.q+=x.q;P.c+=x.u;}else{var avg=P.q>0?P.c/P.q:0,q=Math.min(x.q,P.q);P.c-=avg*q;P.q-=q;if(P.q<1e-6){P.q=0;P.c=0;}}});
+    i=j;}
+  var pgr=(RG+PG)?RG/(RG+PG):null,plr=(RL+PL)?RL/(RL+PL):null;
+  return {RG:RG,RL:RL,PG:PG,PL:PL,pgr:pgr,plr:plr,dias:dias};}
+async function _decOdeanFill(){
+  var el=document.getElementById('dec-od');if(!el)return;
+  try{var O=_decOdCache&&_decOdCache.firma===(movimientos||[]).length+'|'+DEC.exc.join(',')?_decOdCache.o:await _decOdean();
+    _decOdCache={firma:(movimientos||[]).length+'|'+DEC.exc.join(','),o:O};
+    el=document.getElementById('dec-od');if(!el)return;
+    if(!O||O.pgr==null||O.plr==null){el.innerHTML='<div style="font-size:.74rem;color:var(--text3)">No hay datos suficientes para medir el efecto disposición.</div>';return;}
+    var pc=function(x){return Math.round(x*100)+'%';},nR=O.RG+O.RL,dif=O.pgr-O.plr,ratio=O.plr>0?O.pgr/O.plr:null;
+    var v=nR<8?'Todavía hay pocas ventas ('+nR+') para sacar una conclusión firme.':dif>0.1?'📌 <b>Vendés las ganadoras más rápido que las perdedoras</b> (efecto disposición): realizás el '+pc(O.pgr)+' de tus ganancias contra el '+pc(O.plr)+' de tus pérdidas'+(ratio?' (×'+ratio.toFixed(1).replace('.',',')+')':'')+'.':dif<-0.1?'📌 Hacés lo contrario al sesgo común: realizás más rápido las pérdidas ('+pc(O.plr)+') que las ganancias ('+pc(O.pgr)+').':'📌 Venderías ganadoras y perdedoras en proporciones parecidas ('+pc(O.pgr)+' vs '+pc(O.plr)+'): no se ve sesgo claro.';
+    el.innerHTML='<div style="background:var(--surface2);border-left:3px solid #a78bfa;border-radius:6px;padding:9px 12px;font-size:.8rem;line-height:1.6"><div style="font-family:var(--mono);font-size:.56rem;color:var(--text3);text-transform:uppercase;margin-bottom:3px">Efecto disposición · medido día por día</div>'+v+
+      '<div style="font-size:.66rem;color:var(--text3);margin-top:4px;line-height:1.5">En '+O.dias+' días con ventas: vendiste '+O.RG+' posiciones en ganancia y dejaste '+O.PG+'; vendiste '+O.RL+' en pérdida y dejaste '+O.PL+'. Estudios con inversores minoristas dan ~15% vs ~10%. Compara contra el precio de cada día (no contra el de hoy).</div></div>';
+  }catch(e){console.warn('odean',e);if(el)el.innerHTML='<div style="font-size:.74rem;color:var(--text3)">No se pudo calcular el efecto disposición.</div>';}}
 function lvTog(){NV.lv=!NV.lv;nvSave();nvLinea();}
 function nvLinea(){var cw=document.getElementById('nv-cards');if(!cw||!NV_ROWS.length)return;
   var card=document.getElementById('nv-linea');if(!card){card=document.createElement('div');card.className='card';card.id='nv-linea';card.style.cssText='margin-top:1rem';}cw.appendChild(card);
@@ -13000,7 +13042,7 @@ setInterval(function(){try{if(typeof _appInitDone!=='undefined'&&_appInitDone&&!
 // tu plan: los % de tu cartera ideal por grupo (USA, Brasil, Argentina, Europa, China, cripto, renta fija). Cada vez que
 // entra plata compra lo que más le falta para llegar al plan; nunca vende salvo que vos hayas sacado plata (en ese caso
 // vende parejo). Cada grupo se sigue con un activo representativo (SPY, EWZ, GGAL, …).
-var AP={d:null,cargando:null};
+var AP={d:null,cargando:null},AP_COM=0.005; // comisión de 0,5% por operación que también paga tu cartera real
 var AP_PROXY={nyse:[['SPY','nyse']],brasil:[['EWZ','brasil']],argentina:[['GGAL','argentina'],['YPFD','argentina']],europa:[['VGK','europa'],['EWG','europa'],['IEUR','europa']],
   china:[['FXI','china'],['BABA','china']],cripto:[['IBIT','cripto'],['ETHA','cripto']],rf:[['AL30','bonos'],['GD30','bonos']]};
 async function apDatos(){
@@ -13028,11 +13070,12 @@ async function apDatos(){
         if(m>0){var falta={},sf=0;G.forEach(function(k){falta[k]=Math.max(0,(tot+m)*plan[k]-V[k]);sf+=falta[k];});
           G.forEach(function(k){poner[k]=sf>m?m*falta[k]/sf:falta[k]+(m-sf)*plan[k];});}
         else if(tot>0){G.forEach(function(k){poner[k]=m*V[k]/tot;});}
-        G.forEach(function(k){var u=poner[k]||0;if(!u)return;var p=precio(k,ff);if(p){U[k]+=u/p;if(U[k]<0)U[k]=0;}else{caja[k]+=u;if(caja[k]<0)caja[k]=0;}});
+        G.forEach(function(k){var u=poner[k]||0;if(!u)return;var p=precio(k,ff);var cm=u>0?(1-AP_COM):(1+AP_COM);if(p){U[k]+=u*cm/p;if(U[k]<0)U[k]=0;}else{caja[k]+=u*cm;if(caja[k]<0)caja[k]=0;}});
       }
       var vt=0;G.forEach(function(k){vt+=valGrupo(k,f);});out.push({f:f,real:pt.v,plan:Math.round(vt)});
     });
-    return {pts:out,plan:plan,prox:prox,origen:origen,G:G};
+    var fin={},fU=D.sem[D.sem.length-1].f;G.forEach(function(k){fin[k]=Math.round(valGrupo(k,fU));});
+    return {pts:out,plan:plan,prox:prox,origen:origen,G:G,fin:fin};
   })();
   try{AP.d=await AP.cargando;return AP.d;}finally{AP.cargando=null;}
 }
@@ -13051,13 +13094,17 @@ function apArmar(){
     var line=function(key){return P.map(function(p,i){return (i?'L':'M')+X(p.f).toFixed(1)+' '+Y(p[key]).toFixed(1);}).join(' ');};
     sv+='<path d="'+line('plan')+'" fill="none" stroke="#448aff" stroke-width="2" stroke-dasharray="5 4"/><path d="'+line('real')+'" fill="none" stroke="#00e676" stroke-width="2"/>';
     var gana=dif>=0,col=gana?'var(--accent)':'var(--red)';
+    var attr='';try{var rg={};(NV_ROWS||[]).forEach(function(o){var g=_idealG(o.s);rg[g]=(rg[g]||0)+(o.usd||0);});
+      var filas=A.G.map(function(k){var r=rg[k]||0,pl=A.fin[k]||0;return {k:k,r:r,p:pl,d:r-pl};}).sort(function(a,b){return Math.abs(b.d)-Math.abs(a.d);});
+      attr='<div style="margin-top:10px;font-size:.74rem;color:var(--text2)">¿De dónde sale la diferencia? Valor de hoy por grupo (tu cartera vs el plan):</div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.74rem;margin-top:4px"><tr style="color:var(--text3);font-size:.58rem;text-transform:uppercase"><td style="padding:4px">Grupo</td><td style="text-align:right">Tu cartera</td><td style="text-align:right">Plan</td><td style="text-align:right">Diferencia</td></tr>'+
+        filas.map(function(f){return '<tr style="border-top:1px solid var(--border)"><td style="padding:5px 4px">'+_apNom[f.k]+'</td><td style="text-align:right" class="port-sensitive">'+n0(f.r)+'</td><td style="text-align:right" class="port-sensitive">'+n0(f.p)+'</td><td style="text-align:right;color:'+(f.d>=0?'var(--accent)':'var(--red)')+'" class="port-sensitive">'+(f.d>=0?'+':'−')+n0(f.d)+'</td></tr>';}).join('')+'</table></div><div style="font-size:.64rem;color:var(--text3);margin-top:4px;line-height:1.5">Compara solo posiciones abiertas de hoy: lo que ya vendiste y está en liquidez no aparece en ningún grupo. Sirve para ver en qué grupos estás más arriba o más abajo que el plan.</div>';}catch(e){}
     var planTxt=A.G.map(function(k){return _apNom[k]+' '+Math.round(A.plan[k]*100)+'%'+(A.prox[k]?' ('+A.prox[k]+')':' (sin precio: queda quieto)');}).join(' · ');
     b.innerHTML='<div class="hp-g" style="margin-top:0"><div class="hp-k"><div class="l">Tu cartera real</div><div class="v port-sensitive">USD '+n0(ul.real)+'</div></div><div class="hp-k"><div class="l">Siguiendo el plan</div><div class="v port-sensitive">USD '+n0(ul.plan)+'</div></div>'+
       '<div class="hp-k"><div class="l">Tus decisiones</div><div class="v" style="color:'+col+'"><span class="port-sensitive">'+(gana?'+':'−')+'USD '+n0(dif)+'</span> · '+(gana?'+':'−')+Math.abs(difP).toFixed(1).replace('.',',')+'%</div></div></div>'+
       '<div style="margin:10px 0 2px;font-size:.84rem">'+(Math.abs(difP)<2?'Te fue prácticamente igual que si seguías el plan sin tocar nada.':gana?'Tus decisiones te <b style="color:var(--accent)">sumaron</b> frente a seguir el plan sin tocar nada.':'Seguir el plan sin tocar nada te habría dado <b style="color:var(--red)">más</b> que tus decisiones.')+'</div>'+
       '<svg class="hp-svg" viewBox="0 0 860 260">'+sv+'</svg>'+
       '<div style="display:flex;gap:14px;font-size:.7rem;color:var(--text2);margin-top:4px"><span><b style="color:#00e676">━</b> tu cartera real</span><span><b style="color:#448aff">┅</b> el plan en piloto automático</span></div>'+
-      '<div class="hp-l" style="margin-top:8px;line-height:1.5">El plan recibe la misma plata que vos, en las mismas fechas, y compra lo que más le falta según '+A.origen+'. Nunca vende salvo cuando vos sacaste plata. Plan: '+planTxt+'. Sin liquidez ni cobros en ninguno de los dos.</div>';
+      '<div class="hp-l" style="margin-top:8px;line-height:1.5">El plan recibe la misma plata que vos, en las mismas fechas, y compra lo que más le falta según '+A.origen+'. Nunca vende salvo cuando vos sacaste plata. Plan: '+planTxt+'. Sin liquidez ni cobros en ninguno de los dos, y el plan paga 0,5% por operación. Ojo: usa tu plan de hoy para todo el período (no sabe cómo pensabas antes).</div>'+attr;
   }).catch(function(e){console.warn('ap',e);b.innerHTML='<div class="hp-l">No se pudo calcular.</div>';});
 }
 
