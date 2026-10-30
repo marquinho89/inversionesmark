@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2834, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2835, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2835 | 2026-10-30 | Backup: la descarga incluye precios_hist y se puede restaurar desde un archivo .json.',
   'v2834 | 2026-10-30 | Análisis de decisiones: excluye ajustes y vencimientos, efecto disposición (Odean), % por monto, comisión en el plan, grupos que explican la diferencia y opción de incluir extremos.',
   'v2833 | 2026-10-30 | El botón de modo negro aparece también en la vista nueva.',
   'v2832 | 2026-10-30 | Avisos push (movimientos grandes, precio objetivo, resumen diario) y modo negro.',
@@ -5758,7 +5759,7 @@ async function bkOpen(){
   var list=await _bkList();var body=document.getElementById('bk-body');
   if(list===null){body.textContent='No se pudo leer la lista de backups (¿sesión iniciada?).';return;}
   var html='<div style="margin-bottom:10px;line-height:1.5">Copia automática diaria al abrir el portafolio (se guardan '+BK_KEEP+' días). Restaurar reemplaza movimientos, dividendos y configuración por los de esa fecha; antes se guarda una copia del estado actual.</div>'+
-    '<div style="display:flex;gap:8px;margin-bottom:10px"><button class="btn btn-sm" onclick="bkNow()">Hacer backup ahora</button><button class="btn btn-sm" onclick="bkDownloadNow()">Descargar estado actual</button></div>';
+    '<div style="display:flex;gap:8px;margin-bottom:10px"><button class="btn btn-sm" onclick="bkNow()">Hacer backup ahora</button><button class="btn btn-sm" onclick="bkDownloadNow()">Descargar estado actual</button><label class="btn btn-sm" style="cursor:pointer" title="Restaura desde un .json descargado antes">Restaurar desde archivo<input type="file" accept=".json,application/json" style="display:none" onchange="bkRestoreArchivo(this)"></label></div>';
   if(!list.length)html+='<div>Todavía no hay backups.</div>';
   else html+='<table style="width:100%;border-collapse:collapse">'+list.map(function(k){
       var lbl=k.replace('backup_','').replace('_prerestore',' (antes de restaurar)').replace(/_(\d{2})(\d{2})/,' $1:$2');
@@ -5767,11 +5768,25 @@ async function bkOpen(){
 }
 async function bkNow(){try{localStorage.removeItem(PFX+'bk_last');}catch(e){}var key='backup_'+_bkHoy();await _bkDel(key);await bkDaily();bkOpen();}
 async function bkDownload(key){var b=await _bkGet(key);if(!b){alert('No se pudo leer ese backup.');return;}_bkDownload(b,CFG.id+'_'+key+'.json');}
-async function bkDownloadNow(){try{var s=await _bkSnapshot();_bkDownload(s,CFG.id+'_backup_'+_bkHoy()+'.json');}catch(e){alert('No se pudo generar: '+e.message);}}
+// precios_hist es grande: va solo en la descarga manual (no en las copias diarias que se guardan dentro de la base)
+async function _bkPrecios(){var out=[],off=0;
+  while(true){var r=await fetch(SUPABASE_URL+'/rest/v1/precios_hist?select=fecha,precios&order=fecha.asc&limit=1000&offset='+off,{headers:sbHeaders()});
+    if(!r.ok)throw new Error('precios_hist '+r.status);var a=await r.json();if(!a.length)break;out=out.concat(a);off+=a.length;if(a.length<1000)break;}
+  return out;}
+async function bkDownloadNow(){try{var s=await _bkSnapshot();
+  try{s.precios_hist=await _bkPrecios();}catch(e){if(!confirm('No se pudo incluir el historial de precios ('+e.message+').\n\n¿Descargar igual sin él?'))return;}
+  _bkDownload(s,CFG.id+'_backup_'+_bkHoy()+'.json');}catch(e){alert('No se pudo generar: '+e.message);}}
+async function bkRestoreArchivo(inp){var f=inp.files&&inp.files[0];inp.value='';if(!f)return;
+  var b;try{b=JSON.parse(await f.text());}catch(e){alert('El archivo no es un backup válido.');return;}
+  if(!b||!Array.isArray(b.movimientos)||typeof b.config!=='object'){alert('El archivo no tiene el formato de un backup de esta app.');return;}
+  if(b.portafolio&&CFG.id&&b.portafolio!==CFG.id&&!confirm('Este backup es de la cartera "'+b.portafolio+'" y esta es "'+CFG.id+'". ¿Seguir igual?'))return;
+  await _bkAplicar(b,f.name);}
 async function bkRestore(key){
   var b=await _bkGet(key);
   if(!b||!Array.isArray(b.movimientos)){alert('No se pudo leer ese backup.');return;}
-  if(!confirm('Restaurar '+CFG.nombre+' al backup '+key.replace('backup_','')+'?\n\n'+b.movimientos.length+' movimientos y '+(b.trk_divs||[]).length+' dividendos reemplazan a los actuales ('+movimientos.length+' movimientos).\nAntes se guarda una copia del estado actual.'))return;
+  return _bkAplicar(b,key.replace('backup_',''));}
+async function _bkAplicar(b,key){
+  if(!confirm('Restaurar '+CFG.nombre+' al backup '+key+'?\n\n'+b.movimientos.length+' movimientos y '+(b.trk_divs||[]).length+' dividendos reemplazan a los actuales ('+movimientos.length+' movimientos).\nAntes se guarda una copia del estado actual.'))return;
   try{
     var cur=await _bkSnapshot();var d=new Date();
     var preKey='backup_'+_bkHoy()+'_'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+'_prerestore';
@@ -5779,6 +5794,9 @@ async function bkRestore(key){
     var ok1=await sbSaveArrayRetry('movimientos',b.movimientos);
     var ok2=await sbSaveArray('trk_divs',b.trk_divs||[]);
     var keys=Object.keys(b.config||{});for(var i=0;i<keys.length;i++){await sbSetConfig(keys[i],b.config[keys[i]]);}
+    if(Array.isArray(b.precios_hist)&&b.precios_hist.length){for(var pi=0;pi<b.precios_hist.length;pi+=200){
+      var w=await fetch(SUPABASE_URL+'/rest/v1/precios_hist?on_conflict=fecha',{method:'POST',headers:Object.assign({},sbHeaders(),{'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'}),body:JSON.stringify(b.precios_hist.slice(pi,pi+200))});
+      if(!w.ok){ok2=false;break;}}}
     try{localStorage.removeItem(PFX+'pending_sync');localStorage.removeItem(PFX+'mov2');localStorage.removeItem(TRK.DKEY);}catch(e){}
     alert((ok1&&ok2)?'Restaurado. La página se recarga.':'Restauración con errores — revisá los datos. La copia previa quedó como '+preKey);
     location.reload();
