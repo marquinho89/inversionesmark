@@ -689,13 +689,17 @@ html.nv-pre #page-portafolio::before{content:"Cargando cartera…";display:block
               <input type="checkbox" id="mov-filter-nomep" onchange="renderMovimientos()" style="accent-color:var(--amber);width:12px;height:12px;cursor:pointer;margin:0">
               ⚠ Sin MEP en tabla
             </label>
-            <button class="btn btn-sm" onclick="backfillTCDesdeMovimientosUI()" title="Completa CCL_TABLE/MEP_TABLE con el valor ya guardado en cada movimiento (o el promedio, si hubo varios ese día) para las fechas que todavía no estén en la tabla — no pisa nada ya cargado." style="color:var(--accent);border-color:#1a3d2e">🔧 Completar tabla CCL/MEP</button>
             <button class="btn btn-sm" onclick="(function(){document.getElementById(&#39;mov-filter&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-tipo&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-mkt&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-fecha&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-notas&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-noccl&#39;).checked=false;document.getElementById(&#39;mov-filter-nomep&#39;).checked=false;renderMovimientos();})()" title="Limpiar filtros" style="color:var(--text3)">✕</button>
-            <button class="btn btn-sm" onclick="recategorizarTicker()" title="Cambia el mercado de TODOS los movimientos del ticker escrito en el filtro y recalcula precios">🏷 Recategorizar ticker</button>
-            <button class="btn btn-sm" onclick="repararUSDParidad()" title="Corrige el USD unit. de operaciones importadas en dólares que quedaron sin multiplicar por el ratio">🧮 Corregir USD unit.</button>
-            <button class="btn btn-sm" onclick="repararIdsDuplicados()" title="Reasigna un ID único a movimientos con ID repetido">🔧 Reparar IDs</button>
             <button class="btn" onclick="exportCSV()">↓ CSV</button>
-            <button class="btn btn-d" onclick="clearAll()" title="Borrar todos los movimientos">🗑 Borrar todo</button>
+            <details style="position:relative" id="mov-mant"><summary class="btn btn-sm" style="list-style:none;cursor:pointer">🛠 Mantenimiento ▾</summary>
+              <div style="position:absolute;right:0;top:100%;z-index:50;background:var(--bg2,#111);border:1px solid var(--border2);border-radius:6px;padding:6px;display:flex;flex-direction:column;gap:4px;min-width:230px" onclick="this.parentNode.open=false">
+                <button class="btn btn-sm" onclick="backfillTCDesdeMovimientosUI();rellenarHistoricoCCLMEP()" title="Completa las tablas CCL/MEP con los valores guardados en tus movimientos y baja el histórico que falte">🔧 Completar CCL/MEP</button>
+                <button class="btn btn-sm" onclick="recategorizarTicker()" title="Cambia el mercado de TODOS los movimientos del ticker escrito en el filtro y recalcula precios">🏷 Recategorizar ticker</button>
+                <button class="btn btn-sm" onclick="repararUSDParidad()" title="Corrige el USD unit. de operaciones importadas en dólares que quedaron sin multiplicar por el ratio">🧮 Corregir USD unit.</button>
+                <button class="btn btn-sm" onclick="repararIdsDuplicados()" title="Reasigna un ID único a movimientos con ID repetido">🔧 Reparar IDs</button>
+                <button class="btn btn-d btn-sm" onclick="clearAll()" title="Borrar todos los movimientos">🗑 Borrar todo</button>
+              </div>
+            </details>
           </div>
         </div>
         <div id="mov-historial-body" style="display:none">
@@ -1168,13 +1172,6 @@ html.nv-pre #page-portafolio::before{content:"Cargando cartera…";display:block
           </div>
           <div style="margin-top:1.4rem;padding-top:1rem;border-top:1px solid var(--border2)">
             <div style="font-size:.72rem;color:var(--text2);margin-bottom:8px">
-              Si algunos movimientos quedaron sin CCL/MEP para su fecha (huecos en el histórico), completalos acá antes de recategorizar tickers:
-            </div>
-            <button class="btn btn-sm" onclick="rellenarHistoricoCCLMEP()">📈 Completar histórico de CCL/MEP</button>
-            <div id="bi-cclhist-status" style="margin-top:8px;font-size:.72rem"></div>
-          </div>
-          <div style="margin-top:1.4rem;padding-top:1rem;border-top:1px solid var(--border2)">
-            <div style="font-size:.72rem;color:var(--text2);margin-bottom:8px">
               Historial de precios: copia una sola vez el historial de la base de origen a tu propia tabla <code>precios_hist</code> (primero corré el <code>supabase.sql</code> nuevo).
             </div>
             <button class="btn btn-sm" onclick="phMigrarHistorial()">📦 Migrar historial de precios a mi base</button>
@@ -1249,7 +1246,7 @@ window.PORTFOLIO_CONFIG={
 };
 </script>
 <script src="../comun/datos.js?d=8"></script>
-<script src="../comun/portafolio.js?v=2829"></script>
+<script src="../comun/portafolio.js?v=2830"></script>
 <script>
 (function(){
   var LS_KEY='ptMarcos_inicio';

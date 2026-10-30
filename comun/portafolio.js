@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=282, APP_VERSION_FECHA='29/10/2026';
+var APP_VERSION=2830, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2830 | 2026-10-30 | Importador unificado, menú Mantenimiento y versión real.',
   'v282 | 2026-10-29 | Base v282 con configuración propia (Supabase, login por email, Finnhub) e importador de movimientos de Bull Market.'
 ];
 (function(){
@@ -1606,8 +1607,10 @@ async function rellenarHistoricoCCLMEP(){
       statusEl.textContent='✓ Listo: '+cuenta[0]+' fecha(s) de CCL y '+cuenta[1]+' de MEP completadas. Los movimientos ya cargados no se recalculan solos.';
     }
     try{renderMovimientos();renderPortfolio();}catch(e){}
+    if(!statusEl) alert('✓ Listo: '+cuenta[0]+' fecha(s) de CCL y '+cuenta[1]+' de MEP completadas.');
   }catch(e){
     if(statusEl){statusEl.style.color='var(--red)';statusEl.textContent='No se pudo descargar el histórico: '+e.message;}
+    else alert('No se pudo descargar el histórico: '+e.message);
   }
 }
 
