@@ -692,6 +692,7 @@ html.nv-pre #page-portafolio::before{content:"Cargando cartera…";display:block
             <button class="btn btn-sm" onclick="backfillTCDesdeMovimientosUI()" title="Completa CCL_TABLE/MEP_TABLE con el valor ya guardado en cada movimiento (o el promedio, si hubo varios ese día) para las fechas que todavía no estén en la tabla — no pisa nada ya cargado." style="color:var(--accent);border-color:#1a3d2e">🔧 Completar tabla CCL/MEP</button>
             <button class="btn btn-sm" onclick="(function(){document.getElementById(&#39;mov-filter&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-tipo&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-mkt&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-fecha&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-notas&#39;).value=&#39;&#39;;document.getElementById(&#39;mov-filter-noccl&#39;).checked=false;document.getElementById(&#39;mov-filter-nomep&#39;).checked=false;renderMovimientos();})()" title="Limpiar filtros" style="color:var(--text3)">✕</button>
             <button class="btn btn-sm" onclick="recategorizarTicker()" title="Cambia el mercado de TODOS los movimientos del ticker escrito en el filtro y recalcula precios">🏷 Recategorizar ticker</button>
+            <button class="btn btn-sm" onclick="repararUSDParidad()" title="Corrige el USD unit. de operaciones importadas en dólares que quedaron sin multiplicar por el ratio">🧮 Corregir USD unit.</button>
             <button class="btn btn-sm" onclick="repararIdsDuplicados()" title="Reasigna un ID único a movimientos con ID repetido">🔧 Reparar IDs</button>
             <button class="btn" onclick="exportCSV()">↓ CSV</button>
             <button class="btn btn-d" onclick="clearAll()" title="Borrar todos los movimientos">🗑 Borrar todo</button>
@@ -1247,7 +1248,7 @@ window.PORTFOLIO_CONFIG={
 };
 </script>
 <script src="../comun/datos.js?d=8"></script>
-<script src="../comun/portafolio.js?v=2822"></script>
+<script src="../comun/portafolio.js?v=2823"></script>
 <script>
 (function(){
   var LS_KEY='ptMarcos_inicio';

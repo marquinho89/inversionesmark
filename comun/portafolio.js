@@ -1256,8 +1256,10 @@ function biConfirmarImport(){
       // del día para que el motor de cálculo (getPositions, que siempre re-divide precioARS por
       // el CCL de la fecha) reproduzca el mismo precioUSD tanto en compra como en venta.
       cclVal=getTC(m.fecha,mkt)||CCL_HOY;
-      precioUSD=m.precio;
-      precioARS=cclVal?precioUSD*cclVal:precioUSD;
+      // m.precio es USD por CEDEAR/acción local; precioUSD de la app es USD por acción subyacente (× ratio),
+      // igual que en las operaciones en pesos. Los bonos/ON en USD directo quedan como estaban.
+      precioUSD=(mkt==='BONOS'||mkt==='ON'||mkt==='FCI'||isBonoUSDDirecto(m.ticker))?m.precio:m.precio*(ratio||1);
+      precioARS=cclVal?m.precio*cclVal:m.precio;
     } else {
       precioARS=esBonoON?(m.precio/100):m.precio;
       cclVal=getTC(m.fecha,mkt)||CCL_HOY;
@@ -1336,6 +1338,26 @@ function recategorizarTicker(){
 // import masivo viejo: Date.now()+random podía repetirse entre cientos de filas creadas
 // en el mismo milisegundo). Sin esto, "Editar" podía abrir la primera fila que compartía
 // el id, no la que realmente se tocó.
+// Corrige el "USD unit." de compras/ventas ya importadas en dólares (PARIDAD) que quedaron sin multiplicar por el ratio.
+// Solo toca precioUSD (y ratio si faltaba); no cambia cantidad ni precio en pesos.
+function repararUSDParidad(){
+  var n=0,det=[];
+  movimientos.forEach(function(m){
+    if(!m||(m.notas||'').indexOf('PARIDAD')<0)return;
+    if(m.mercado==='BONOS'||m.mercado==='ON'||m.mercado==='FCI'||isBonoUSDDirecto(m.ticker))return;
+    var ratio=getRatio(m.ticker)||m.ratio||1, tc=m.ccl||getTC(m.fecha,m.mercado);
+    if(!(tc>0)||!(m.precioARS>0))return;
+    var nuevo=m.precioARS*ratio/tc;
+    if(!(m.precioUSD>0)||Math.abs(nuevo-m.precioUSD)/nuevo>0.01){
+      det.push(m.ticker+' '+m.fecha+': '+(m.precioUSD||0).toFixed(3)+' → '+nuevo.toFixed(2));
+      m.precioUSD=nuevo;m.ratio=ratio;n++;
+    }
+  });
+  if(!n){alert('No encontré operaciones en dólares con el USD unit. sin corregir.');return;}
+  saveAndRender();
+  alert('✓ Se corrigió el USD unit. de '+n+' operación(es):\n\n'+det.slice(0,15).join('\n')+(det.length>15?'\n…':''));
+}
+
 function repararIdsDuplicados(){
   var vistos={};
   var duplicados=[];
