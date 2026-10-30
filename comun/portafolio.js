@@ -1040,6 +1040,7 @@ function _biFechaISO(v){
 // Parsea un archivo ya cargado (array de filas, header en la fila 0) usando el
 // esquema fijo de columnas de Bull Market: Liquida/Operado/Comprobante/Numero/
 // Cantidad/Especie/Precio/Importe/Saldo/Referencia.
+function importe_ok(v){var n=typeof v==='number'?v:parseFloat(v);return !isNaN(n)&&n>0;}
 function _biParseArchivo(rows, tipoArchivo){
   var out={compraventa:[],dividendos:[],ignorados:0,totalFilasDato:0,comprobantesVistos:{},motivosIgnorado:{}};
   if(!rows||!rows.length) return out;
@@ -1105,6 +1106,15 @@ function _biParseArchivo(rows, tipoArchivo){
         tipo: comp==='RENTA Y AMORTIZ' ? 'RENTA':'DIV',
         descr: 'Bull Market · '+comp,
         acciones: null
+      });
+    } else if(tipoArchivo==='pesos' && ticker && comp===ticker+' BYMA' && cantidad<0 && importe_ok(r[iImporte]) && fechaDDMM){
+      // Vencimiento / rescate total de un bono: Bull lo informa como "<TICKER> BYMA" con cantidad negativa e Importe en pesos.
+      // Se importa como VENTA al valor de rescate (precio por 100 VN = importe / nominales × 100), así la posición se cierra.
+      var _imp=Math.abs(typeof r[iImporte]==='number'?r[iImporte]:parseFloat(r[iImporte]));
+      out.compraventa.push({
+        tipo:'venta', ticker:ticker, fecha:fechaDDMM,
+        qty:Math.abs(cantidad), precio:_imp/Math.abs(cantidad)*100,
+        origenMoneda:tipoArchivo, comprobante:comp+' · vencimiento'
       });
     } else {
       out.ignorados++; out.motivosIgnorado['comprobante no clasificado: '+comp]=(out.motivosIgnorado['comprobante no clasificado: '+comp]||0)+1; // caución, transferencias, notas de crédito/débito, retenciones, aranceles
