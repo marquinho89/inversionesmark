@@ -4,7 +4,8 @@
 <title>Marcos</title>
 <link rel="manifest" href="../manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="../app/icon-192.png">
-<meta name="theme-color" content="#0b1120">
+<meta name="theme-color" content="#0b1120" id="meta-theme">
+<script>try{if(localStorage.getItem("tema_negro")==="1"){document.documentElement.classList.add("negro");document.getElementById("meta-theme").content="#000000";}}catch(e){}</script>
 <link rel="apple-touch-icon" href="../app/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -16,6 +17,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/css/jsvectormap.min.css">
 <style>
 :root{--bg:#0b1120;--surface:#111927;--surface2:#172035;--border:#1e3050;--border2:#264070;--text:#e8f0ff;--text2:#7a9cc5;--text3:#3d5a80;--accent:#00e676;--accent2:#00c853;--red:#ff5252;--amber:#ffd600;--blue:#448aff;--green:#00e676;--mono:"JetBrains Mono",monospace;--sans:"Inter",sans-serif;--radius:10px;--rsm:6px}
+:root.negro{--bg:#000;--surface:#0a0a0a;--surface2:#131313;--border:#1f1f1f;--border2:#2e2e2e;--text:#f2f2f2;--text2:#9a9a9a;--text3:#5c5c5c}
 *{box-sizing:border-box;margin:0;padding:0}html{font-size:15.5px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
 body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;line-height:1.5;overflow:hidden;display:flex;flex-direction:column;height:100vh;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 .app{display:flex;flex-direction:column;flex:1;min-height:0}
@@ -386,6 +388,7 @@ html.nv-pre #page-portafolio::before{content:"Cargando cartera…";display:block
     <span style="font-weight:700;font-size:1rem;letter-spacing:-.02em">Portafolio Marcos</span>
   </div>
   <div class="hright">
+    <button id="tema-btn" class="btn-sidebar-toggle" style="width:auto;padding:0 8px;font-size:.85rem" title="Modo negro (pantallas OLED)" onclick="(function(){var r=document.documentElement,n=!r.classList.contains('negro');r.classList.toggle('negro',n);try{localStorage.setItem('tema_negro',n?'1':'0');}catch(e){}var m=document.getElementById('meta-theme');if(m)m.content=n?'#000000':'#0b1120';document.getElementById('tema-btn').textContent=n?'☀️':'🌑';})()">🌑</button><script>if(document.documentElement.classList.contains("negro"))document.getElementById("tema-btn").textContent="☀️";</script>
     <div class="lupd" style="font-size: 0.65rem; color: var(--accent);" id="sb-status">🟢 Supabase conectado</div>
     <div class="lupd" id="lupd"></div>
     <button class="btn-sidebar-toggle" onclick="cargarJuliEnComparacion()" title="Cargar posiciones actuales en Comparación" style="width:auto;padding:0 8px;font-size:.72rem;">⇔</button>
@@ -1235,11 +1238,11 @@ window.PORTFOLIO_CONFIG={
   broker:'bull', brokerNombre:'Bull', // broker para la Comparación (bull, cocos o veta)
   vistaNueva:true, historial:true, aportes:true, valuarMEP:true, perfilDefault:'moderado',
   // Funciones de carteras familiares: apagadas
-  vistaFamiliar:false, push:false, sync:false, rsi:false
+  vistaFamiliar:false, push:true, sync:false, rsi:false
 };
 </script>
 <script src="../comun/datos.js?d=8"></script>
-<script src="../comun/portafolio.js?v=2831"></script>
+<script src="../comun/portafolio.js?v=2832"></script>
 <script>
 (function(){
   var LS_KEY='ptMarcos_inicio';

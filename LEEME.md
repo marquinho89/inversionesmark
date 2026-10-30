@@ -96,4 +96,4 @@ Normalmente alcanza con reemplazar los archivos de `comun/` y subir el número `
 ## Notas
 
 - Los precios en vivo salen de fuentes públicas (data912, Yahoo, Finnhub, dolarapi, argentinadatos). El historial de precios usa una tabla pública de precios de mercado (solo lectura).
-- Las funciones de carteras familiares (vista familiar, avisos push, sync entre carteras, honorarios) están apagadas en esta copia.
+- Las funciones de carteras familiares (vista familiar, sync entre carteras, honorarios) están apagadas en esta copia. Los avisos push están activos: ver `supabase/functions/avisos` y `supabase_avisos.sql`.

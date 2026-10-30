@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2831, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2832, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2832 | 2026-10-30 | Avisos push (movimientos grandes, precio objetivo, resumen diario) y modo negro.',
   'v2831 | 2026-10-30 | Se elimina la migración de historial y la credencial de la base de origen.',
   'v2830 | 2026-10-30 | Importador unificado, menú Mantenimiento y versión real.',
   'v282 | 2026-10-29 | Base v282 con configuración propia (Supabase, login por email, Finnhub) e importador de movimientos de Bull Market.'
@@ -12332,7 +12333,7 @@ function nvPlanSalida(){if(!CFG.simRetiro&&!CFG.planSalida)return;var cw=documen
    (top?'<br><span style="color:var(--text3)">Mayores aportes:</span> <span class="port-sensitive">'+top+'</span>':'')+'</div></div>';}
 
 // ─── 🔔 Avisos push (CFG.push) ─────────────────────────────────────────────────
-var VAPID_PUB=''; // Avisos push apagados (CFG.push): hace falta generar tu propia clave VAPID y desplegar la función 'avisos' en tu Supabase.
+var VAPID_PUB='BPqX3Inm3e-KkucxvhO39gBwIOlYNep0mXjvKNqDC8ynLOoy2cqnNmG5X0_s5v6jSzFXFOyQABKHHW_vTbsDniw'; // clave pública VAPID de ESTE proyecto (la privada vive solo en los secretos de Supabase)
 function _b64u(s){var p='='.repeat((4-s.length%4)%4),b=(s+p).replace(/-/g,'+').replace(/_/g,'/'),r=atob(b),o=new Uint8Array(r.length);for(var i=0;i<r.length;i++)o[i]=r.charCodeAt(i);return o;}
 function pushSoportado(){return 'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;}
 function _esIOS(){return /iPad|iPhone|iPod/.test(navigator.userAgent);}
