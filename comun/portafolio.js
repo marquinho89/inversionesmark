@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2830, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2831, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2831 | 2026-10-30 | Se elimina la migración de historial y la credencial de la base de origen.',
   'v2830 | 2026-10-30 | Importador unificado, menú Mantenimiento y versión real.',
   'v282 | 2026-10-29 | Base v282 con configuración propia (Supabase, login por email, Finnhub) e importador de movimientos de Bull Market.'
 ];
@@ -10945,32 +10946,6 @@ function simrResultado(){
 (function _simrBoot(n){setTimeout(function(){if(!CFG.simRetiro)return;if(typeof _appInitDone!=='undefined'&&_appInitDone){simrLoad().then(function(){if(CFG.historial&&typeof histLoad==='function')return histLoad();}).then(function(){simrRender(true);});}else if(n<40)_simrBoot(n+1);},1800);})(0);
 
 // ─── 📈 Historial de precios por activo ─────────────────────────────────────
-var PH_VIEJO={url:'https://wstnseufzyavgdovrehu.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndzdG5zZXVmenlhdmdkb3ZyZWh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3NzU0MTYsImV4cCI6MjA5MTM1MTQxNn0.0mmKvfCM_HoBJjbIhFzM5TeKEc-LphQwEXNjHqV_CfU'};
-// Copia UNA VEZ el historial de precios de la base de origen a tu propia tabla precios_hist (no pisa nada).
-async function phMigrarHistorial(){
-  var st=document.getElementById('ph-mig-status');
-  function msg(c,t){if(st){st.style.color=c;st.textContent=t;}}
-  try{
-    msg('var(--text2)','Descargando historial de origen…');
-    var filas=[],off=0;
-    while(true){
-      var r=await fetchWithTimeout(PH_VIEJO.url+'/rest/v1/precios_hist?select=fecha,precios&order=fecha.asc&limit=1000&offset='+off,{headers:{apikey:PH_VIEJO.key,Authorization:'Bearer '+PH_VIEJO.key}},30000);
-      if(!r.ok)throw new Error('origen HTTP '+r.status);
-      var a=await r.json();if(!a.length)break;
-      filas=filas.concat(a);off+=a.length;if(a.length<1000)break;
-      msg('var(--text2)','Descargando… '+filas.length+' fechas');
-    }
-    if(!filas.length)throw new Error('el origen no devolvió datos');
-    var ok=0;
-    for(var i=0;i<filas.length;i+=200){
-      var lote=filas.slice(i,i+200).map(function(f){return {fecha:f.fecha,precios:f.precios||{}};});
-      var w=await fetch(SUPABASE_URL+'/rest/v1/precios_hist?on_conflict=fecha',{method:'POST',headers:Object.assign({},sbHeaders(),{'Prefer':'resolution=ignore-duplicates,return=minimal'}),body:JSON.stringify(lote)});
-      if(!w.ok)throw new Error('tu base HTTP '+w.status+' (¿corriste el supabase.sql nuevo?)');
-      ok+=lote.length;msg('var(--text2)','Guardando en tu base… '+ok+'/'+filas.length);
-    }
-    msg('var(--accent)','✓ Listo: '+ok+' fechas copiadas a tu base.');
-  }catch(e){msg('var(--red)','No se pudo migrar: '+e.message);}
-}
 var _phFx={},_phSer={},_phChart=null,_phSt=null;
 function _phFxLoad(t){
   if(!_phFx[t])_phFx[t]=fetchWithTimeout('https://api.argentinadatos.com/v1/cotizaciones/dolares/'+t,{},12000)
