@@ -976,50 +976,85 @@ function _biFixRange(ws){
   ws['!ref']=nuevoRef;
 }
 
-function biLoadFile(which,input){
-  if(typeof XLSX==='undefined'){ xlsxListo().then(function(){biLoadFile(which,input);}).catch(function(){alert('No se pudo cargar el lector de Excel. Revisá la conexión.');}); return; }
-  var f=input.files&&input.files[0];
-  var nameEl=document.getElementById('bi-'+(which==='pesos'?'pesos':which==='dolar'?'dolar':'cable')+'-name');
-  if(!f){ if(nameEl)nameEl.textContent='Sin archivo'; _biFiles[which]=null; return; }
-  if(nameEl) nameEl.textContent=f.name+' (leyendo…)';
-  var p=new Promise(function(resolve){
+// ─── Flujo unificado: archivos Excel (uno o varios) y/o texto pegado → bloques con su moneda ───
+var _biChunks=[],_biChunkSeq=0;
+function _biEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function _biHdrIdx(rows){
+  for(var i=0;i<Math.min(15,(rows||[]).length);i++){var r=rows[i];if(r&&String(r[2]==null?'':r[2]).trim().toLowerCase()==='comprobante')return i;}
+  return -1;
+}
+// Moneda del extracto según los comprobantes que trae: PARIDAD = dólar; COMPRA NORMAL/VENTA = pesos; solo dividendos = dólar cable.
+function _biDetectarTipo(rows){
+  var ks={};(rows||[]).forEach(function(r){if(r&&r[2]!=null)ks[String(r[2]).trim().toUpperCase()]=1;});
+  var k=Object.keys(ks);
+  if(k.some(function(c){return /PARIDAD/.test(c);}))return 'dolar';
+  if(k.some(function(c){return c==='COMPRA NORMAL'||c==='VENTA'||/ BYMA$/.test(c);}))return 'pesos';
+  if(ks['DIVIDENDOS'])return 'cable';
+  if(ks['RENTA Y AMORTIZ'])return 'dolar';
+  return 'pesos';
+}
+function _biLeerArchivo(f){
+  return new Promise(function(resolve,reject){
     var reader=new FileReader();
+    reader.onerror=function(){reject(new Error('no se pudo leer el archivo'));};
     reader.onload=function(e){
       try{
-        var wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
-        // Info de diagnóstico expuesta en window para poder inspeccionarla desde la consola
-        // del navegador sin tener que escribir JS complicado.
-        window._biDebug=window._biDebug||{};
-        window._biDebug[which]={
-          bytesLeidos: e.target.result.byteLength,
-          hojas: wb.SheetNames,
-          refPorHoja: wb.SheetNames.map(function(n){return n+': '+(wb.Sheets[n]['!ref']||'(sin !ref)');})
-        };
-        // Buscar, entre TODAS las hojas del archivo, la que tenga la columna 2 = "Comprobante"
-        // (posición fija, no depende del texto exacto del resto de encabezados).
-        var rowsElegidas=null;
-        for(var si=0; si<wb.SheetNames.length; si++){
+        var wb=XLSX.read(e.target.result,{type:'array',cellDates:true}),rows=null;
+        // Buscar, entre todas las hojas, la que tenga la columna 3 = "Comprobante".
+        for(var si=0;si<wb.SheetNames.length;si++){
           _biFixRange(wb.Sheets[wb.SheetNames[si]]);
-          var rowsTmp=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[si]],{header:1,defval:null});
-          window._biDebug[which]['filasHoja_'+si]=rowsTmp.length;
-          var tieneHeader=rowsTmp.slice(0,15).some(function(r){
-            if(!r) return false;
-            return String(r[2]==null?'':r[2]).trim().toLowerCase()==='comprobante';
-          });
-          if(tieneHeader){ rowsElegidas=rowsTmp; break; }
+          var tmp=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[si]],{header:1,defval:null});
+          if(_biHdrIdx(tmp)>=0){rows=tmp;break;}
         }
-        _biFiles[which]=rowsElegidas || XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:null});
-      }catch(err){
-        alert('No pude leer el archivo de '+which+': '+err.message);
-        _biFiles[which]=null;
-      }
-      if(nameEl) nameEl.textContent=f.name+' ('+(_biFiles[which]?_biFiles[which].length:0)+' filas leídas)';
-      resolve();
+        resolve(rows||XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:null}));
+      }catch(err){reject(err);}
     };
     reader.readAsArrayBuffer(f);
   });
-  _biPending[which]=p;
-  return p;
+}
+async function biAgregarArchivos(input){
+  var files=Array.prototype.slice.call((input&&input.files)||[]);if(!files.length)return;
+  var st=document.getElementById('bi-status');
+  if(typeof XLSX==='undefined'){try{await xlsxListo();}catch(e){alert('No se pudo cargar el lector de Excel. Revisá la conexión.');return;}}
+  for(var i=0;i<files.length;i++){
+    try{var rows=await _biLeerArchivo(files[i]);_biChunks.push({id:++_biChunkSeq,origen:'archivo',name:files[i].name,rows:rows,tipo:_biDetectarTipo(rows)});}
+    catch(err){if(st){st.style.color='var(--red)';st.textContent='No pude leer '+files[i].name+': '+err.message;}}
+  }
+  try{input.value='';}catch(e){}
+  await biProcesar();
+}
+function biSetTipoChunk(id,t){_biChunks.forEach(function(c){if(c.id===id)c.tipo=t;});biProcesar();}
+function biQuitarChunk(id){
+  _biChunks=_biChunks.filter(function(c){return c.id!==id;});
+  if(!_biChunks.length){_biParsed=null;var p=document.getElementById('bi-preview');if(p)p.innerHTML='';var w=document.getElementById('bi-tickers-wrap');if(w)w.style.display='none';biRenderChunks();return;}
+  biProcesar();
+}
+function biRenderChunks(){
+  var el=document.getElementById('bi-chunks');if(!el)return;
+  if(!_biChunks.length){el.innerHTML='';return;}
+  var opt=function(v,l,s){return '<option value="'+v+'"'+(s===v?' selected':'')+'>'+l+'</option>';};
+  el.innerHTML=_biChunks.map(function(c){
+    var hi=_biHdrIdx(c.rows),n=Math.max(0,(c.rows||[]).length-(hi>=0?hi+1:0));
+    return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.72rem;margin-bottom:4px">'
+      +'<span style="font-family:var(--mono)">'+(c.origen==='pegado'?'📋':'📄')+' '+_biEsc(c.name)+'</span>'
+      +'<span style="color:var(--text3)">'+n+' filas · moneda:</span>'
+      +'<select onchange="biSetTipoChunk('+c.id+',this.value)" style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-family:var(--mono);font-size:.7rem;padding:2px 4px">'
+      +opt('pesos','Pesos',c.tipo)+opt('dolar','Dólar',c.tipo)+opt('cable','Dólar Cable',c.tipo)+'</select>'
+      +'<button class="btn btn-sm" onclick="biQuitarChunk('+c.id+')" title="Quitar">✕</button></div>';
+  }).join('');
+}
+// Botón único "Procesar": toma el texto pegado (si hay) y todos los bloques cargados.
+async function biProcesarTodo(){
+  var ta=document.getElementById('bi-paste-text'),st=document.getElementById('bi-status');
+  var txt=ta?ta.value.trim():'';
+  if(txt){
+    var rows=_biPegarARows(txt);
+    if(rows.length<2){if(st){st.style.color='var(--red)';st.textContent='No encontré filas en lo pegado. Copiá la tabla de Cuenta Corriente de Bull (con las columnas Liquida, Operado, Comprobante, Numero, Cantidad, Especie, Precio, Importe…).';}return;}
+    _biChunks=_biChunks.filter(function(c){return c.origen!=='pegado';});
+    _biChunks.push({id:++_biChunkSeq,origen:'pegado',name:'Texto pegado',rows:rows,tipo:_biDetectarTipo(rows)});
+  }
+  if(!_biChunks.length){if(st){st.style.color='var(--red)';st.textContent='Elegí un archivo o pegá las operaciones primero.';}return;}
+  await biProcesar();
 }
 
 function _biFechaDDMMYYYY(v){
@@ -1079,7 +1114,8 @@ function _biParseArchivo(rows, tipoArchivo){
     if(!comp) continue;
     out.totalFilasDato++;
     out.comprobantesVistos[comp]=(out.comprobantesVistos[comp]||0)+1;
-    var ticker=String(r[iEsp]||'').trim().toUpperCase();
+    var ticker=String(r[iEsp]||'').trim().toUpperCase().replace(/[^A-Z0-9.\-_]/g,'');
+    var numero=String(r[IDX.NUMERO]==null?'':r[IDX.NUMERO]).trim();
     var fechaDDMM=_biFechaDDMMYYYY(r[iOperado]);
     var fechaISO=_biFechaISO(r[iOperado]);
     var cantidad=typeof r[iCant]==='number'?r[iCant]:parseFloat(r[iCant]);
@@ -1093,6 +1129,7 @@ function _biParseArchivo(rows, tipoArchivo){
         ticker: ticker, fecha: fechaDDMM,
         qty: Math.abs(cantidad)||0, precio: isNaN(precio)?null:precio,
         importe: (function(){var n=typeof r[iImporte]==='number'?r[iImporte]:parseFloat(r[iImporte]);return isNaN(n)?null:Math.abs(n);})(),
+        numero: numero,
         origenMoneda: tipoArchivo, comprobante: comp
       });
     } else if(divSet.indexOf(comp)>=0){
@@ -1115,7 +1152,7 @@ function _biParseArchivo(rows, tipoArchivo){
       out.compraventa.push({
         tipo:'venta', ticker:ticker, fecha:fechaDDMM,
         qty:Math.abs(cantidad), precio:_imp/Math.abs(cantidad)*100,
-        origenMoneda:tipoArchivo, comprobante:comp+' · vencimiento'
+        numero:numero, origenMoneda:tipoArchivo, comprobante:comp+' · vencimiento'
       });
     } else {
       out.ignorados++; out.motivosIgnorado['comprobante no clasificado: '+comp]=(out.motivosIgnorado['comprobante no clasificado: '+comp]||0)+1; // caución, transferencias, notas de crédito/débito, retenciones, aranceles
@@ -1127,9 +1164,16 @@ function _biParseArchivo(rows, tipoArchivo){
 async function biProcesar(){
   var statusEl=document.getElementById('bi-status');
   // Esperar a que terminen de leerse (son lecturas asincrónicas) los archivos que estén en curso.
-  await Promise.all([_biPending.pesos,_biPending.dolar,_biPending.cable].filter(Boolean));
+  // Armar los extractos por moneda a partir de los bloques cargados (archivos y/o pegado).
+  _biFiles={pesos:null,dolar:null,cable:null};
+  _biChunks.forEach(function(c){
+    if(!c.rows||!c.rows.length)return;
+    if(!_biFiles[c.tipo])_biFiles[c.tipo]=c.rows.slice();
+    else{var hi=_biHdrIdx(c.rows);_biFiles[c.tipo]=_biFiles[c.tipo].concat(c.rows.slice(hi>=0?hi+1:0));}
+  });
+  biRenderChunks();
   if(!_biFiles.pesos&&!_biFiles.dolar&&!_biFiles.cable){
-    if(statusEl){statusEl.style.color='var(--red)';statusEl.textContent='Subí al menos un archivo primero.';}
+    if(statusEl){statusEl.style.color='var(--red)';statusEl.textContent='Elegí un archivo o pegá las operaciones primero.';}
     return;
   }
   var res={compraventa:[],dividendos:[],ignorados:0,diag:{}};
@@ -1154,10 +1198,16 @@ async function biProcesar(){
   var tickersNuevos=Object.keys(tickersSet).filter(function(t){ return !SECTOR_MAP[t] && !_biMercadoElegido[t]; }).sort();
 
   // Omitir lo que ya está cargado (misma fecha, tipo, ticker y cantidad), así se puede pegar o subir un rango que se superponga.
-  var _ex={};
-  movimientos.forEach(function(x){ if(!x||!x.fecha)return; var k=[x.fecha,x.tipo,String(x.ticker||'').toUpperCase(),Math.round((+x.qty||0)*10000)].join('|'); _ex[k]=(_ex[k]||0)+1; });
+  var _exB={},_ex={},_vis={};
+  movimientos.forEach(function(x){
+    if(!x||!x.fecha)return;
+    if(x.bullKey){_exB[x.bullKey]=1;return;}   // cargado con número de comprobante: se compara exacto
+    var k=[x.fecha,x.tipo,String(x.ticker||'').toUpperCase(),Math.round((+x.qty||0)*10000)].join('|'); _ex[k]=(_ex[k]||0)+1; // cargado antes: se compara por fecha, tipo, ticker y cantidad
+  });
   res.omitidos=0;
   res.compraventa=res.compraventa.filter(function(m){
+    m.bullKey=m.numero?[m.numero,m.ticker,m.tipo,Math.round((+m.qty||0)*10000)].join('|'):'';
+    if(m.bullKey){ if(_exB[m.bullKey]||_vis[m.bullKey]){res.omitidos++;return false;} _vis[m.bullKey]=1; }
     var k=[m.fecha,m.tipo,m.ticker,Math.round((+m.qty||0)*10000)].join('|');
     if(_ex[k]>0){ _ex[k]--; res.omitidos++; return false; }
     return true;
@@ -1199,18 +1249,6 @@ function _biPegarARows(texto){
   });
   return [['Liquida','Operado','Comprobante','Numero','Cantidad','Especie','Precio','Importe','Saldo','Referencia']].concat(datos);
 }
-async function biPegarProcesar(){
-  var st=document.getElementById('bi-status'),ta=document.getElementById('bi-paste-text'),sel=document.getElementById('bi-paste-moneda');
-  var rows=_biPegarARows(ta?ta.value:'');
-  if(rows.length<2){ if(st){st.style.color='var(--red)';st.textContent='No encontré filas para importar. Copiá la tabla de Bull Market (con las columnas Liquida, Operado, Comprobante, Numero, Cantidad, Especie, Precio, Importe…) y pegala acá.';} return; }
-  var tipo=sel?sel.value:'auto';
-  if(tipo==='auto'){ tipo=rows.some(function(r){return /PARIDAD/i.test(String(r[2]||''));})?'dolar':'pesos'; }
-  _biFiles={pesos:null,dolar:null,cable:null}; _biFiles[tipo]=rows;
-  _biPending={pesos:null,dolar:null,cable:null};
-  ['pesos','dolar','cable'].forEach(function(k){var n=document.getElementById('bi-'+k+'-name');if(n)n.textContent=(k===tipo)?('Pegado ('+(rows.length-1)+' filas)'):'Sin archivo';});
-  await biProcesar();
-}
-
 // ════════════════════════════════════════════════════════
 // CONCILIAR CON BULL — compara tu tenencia de Bull Market con la de la página y propone
 // movimientos de ajuste (con precio ESTIMADO) para que las cantidades y el PPC coincidan.
@@ -1290,7 +1328,7 @@ function cnRender(){
   _cnProp.forEach(function(p,i){
     var bono=(getSector(p.ticker)==='bonos'||getSector(p.ticker)==='on');
     h+='<tr><td><input type="checkbox" '+(p.aplicar?'checked ':'')+(p.mercado?'':'disabled ')+'onchange="_cnProp['+i+'].aplicar=this.checked"></td>'
-     +'<td class="mono"><b>'+p.ticker+'</b></td><td class="mono">'+f(p.qtyPag,0)+'</td><td class="mono">'+f(p.qtyBull,0)+'</td>'
+     +'<td class="mono"><b>'+_biEsc(p.ticker)+'</b></td><td class="mono">'+f(p.qtyPag,0)+'</td><td class="mono">'+f(p.qtyBull,0)+'</td>'
      +'<td class="mono" style="color:'+(p.tipo==='compra'?'var(--accent)':'var(--red)')+'">'+p.tipo+' '+f(p.qty,0)+'</td>'
      +'<td class="mono">$'+f(bono?p.precio*100:p.precio,2)+(bono?' /100':'')+'</td><td class="mono">'+p.fecha+'</td>'
      +'<td style="font-size:.66rem;color:var(--text3)">'+p.modo+(p.mercado?'':' · <span style="color:var(--amber)">falta mercado</span>')+'</td></tr>';
@@ -1442,7 +1480,7 @@ function biConfirmarImport(){
     nuevosMov.push({
       id:_biIdBase+(_biIdIdx++), fecha:m.fecha, tipo:m.tipo, mercado:mkt,
       ticker:m.ticker, qty:m.qty, precioARS:precioARS, ccl:cclVal, ratio:ratio, precioUSD:precioUSD,
-      comision:0, comisionPct:0, notas:'Importado desde Bull Market ('+m.comprobante+')',
+      comision:0, comisionPct:0, notas:'Importado desde Bull Market ('+m.comprobante+')', bullKey:m.bullKey||undefined,
       finish:false, owner:undefined, loteMethod: m.tipo==='venta' ? 'promedio' : undefined
     });
   });
@@ -1578,7 +1616,7 @@ function showPage(id,btn){
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
   document.querySelectorAll('.nav-item').forEach(function(b){b.classList.remove('active');});
   document.getElementById('page-'+id).classList.add('active');
-  if(['tracker','comparacion','ventahist','ventaestad','ratios','movimientos'].indexOf(id)>=0)_xlsxPrecargar();
+  if(['tracker','comparacion','ventahist','ventaestad','ratios','movimientos','importbull'].indexOf(id)>=0)_xlsxPrecargar();
   if(CFG.vistaNueva)document.body.classList.toggle('nv-port',id==='portafolio');
   if(id==='tipocambio') tcRender();
   if(btn)btn.classList.add('active');

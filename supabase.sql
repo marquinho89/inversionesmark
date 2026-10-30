@@ -67,8 +67,10 @@ alter table public.movimientos  enable row level security;
 alter table public.trk_divs     enable row level security;
 alter table public.config       enable row level security;
 
+revoke all on public.movimientos, public.trk_divs, public.config, public.precios_hist from anon;
+revoke truncate, references, trigger on public.movimientos, public.trk_divs, public.config, public.precios_hist from authenticated;
 grant select, insert, update, delete on public.movimientos, public.trk_divs, public.config, public.precios_hist to authenticated;
-revoke select, insert, update, delete on public.movimientos, public.trk_divs, public.config, public.precios_hist from anon;
+alter default privileges in schema public revoke all on tables from anon;
 
 do $$ declare t text; begin
   foreach t in array array['movimientos','trk_divs','config','precios_hist'] loop

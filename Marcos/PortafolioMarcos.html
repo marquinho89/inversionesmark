@@ -1137,47 +1137,18 @@ html.nv-pre #page-portafolio::before{content:"Cargando cartera…";display:block
           <span class="card-title">📥 Importar movimientos desde Bull Market</span>
         </div>
         <div class="card-body" style="padding:.85rem 1rem">
-          <div style="font-size:.72rem;color:var(--text2);margin-bottom:1rem;line-height:1.5">
-            Subí los 3 extractos de "Cuenta Corriente" que baja Bull Market (Pesos, Dólar y Dólar Cable). El sistema arma automáticamente
-            los movimientos de compra/venta y encola los dividendos/cupones en "Pendientes de revisión" (solapa Dividendos) para que los confirmes vos.
-            No se importa nada hasta que apretés "Confirmar importación" al final.
+          <div style="font-size:.72rem;color:var(--text2);margin-bottom:.8rem;line-height:1.5">
+            Subí los extractos de "Cuenta Corriente" de Bull Market (uno o varios Excel) o pegá las filas copiadas de la web.
+            La moneda (pesos, dólar o dólar cable) se detecta sola y la podés corregir. Compras y ventas arman movimientos, los cobros
+            van a "Pendientes de revisión" (solapa Dividendos) y lo que ya está cargado se omite. No se guarda nada hasta que apretés "Confirmar importación".
           </div>
-          <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem">
-            <div>
-              <div style="font-size:.63rem;font-family:var(--mono);color:var(--text3);margin-bottom:4px">Pesos</div>
-              <label class="btn btn-sm" style="cursor:pointer;gap:5px">📂 <span id="bi-pesos-name" style="font-family:var(--mono);font-size:.72rem">Sin archivo</span><input type="file" id="bi-pesos-file" accept=".xlsx,.xls" style="display:none" onchange="biLoadFile('pesos',this)"></label>
-            </div>
-            <div>
-              <div style="font-size:.63rem;font-family:var(--mono);color:var(--text3);margin-bottom:4px">Dólar</div>
-              <label class="btn btn-sm" style="cursor:pointer;gap:5px">📂 <span id="bi-dolar-name" style="font-family:var(--mono);font-size:.72rem">Sin archivo</span><input type="file" id="bi-dolar-file" accept=".xlsx,.xls" style="display:none" onchange="biLoadFile('dolar',this)"></label>
-            </div>
-            <div>
-              <div style="font-size:.63rem;font-family:var(--mono);color:var(--text3);margin-bottom:4px">Dólar Cable</div>
-              <label class="btn btn-sm" style="cursor:pointer;gap:5px">📂 <span id="bi-cable-name" style="font-family:var(--mono);font-size:.72rem">Sin archivo</span><input type="file" id="bi-cable-file" accept=".xlsx,.xls" style="display:none" onchange="biLoadFile('cable',this)"></label>
-            </div>
-            <button class="btn btn-a btn-sm" onclick="biProcesar()" style="margin-left:auto">Procesar archivos</button>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+            <label class="btn btn-sm" style="cursor:pointer;gap:5px">📂 Elegir archivos Excel<input type="file" id="bi-files" accept=".xlsx,.xls" multiple style="display:none" onchange="biAgregarArchivos(this)"></label>
+            <span style="font-size:.68rem;color:var(--text3)">o pegá abajo las filas de la tabla</span>
           </div>
-          <div style="margin-bottom:1rem;padding:.7rem .8rem;border:1px solid var(--border2);border-radius:var(--rsm)">
-            <div style="font-size:.72rem;color:var(--text2);margin-bottom:6px">
-              <b>O pegá las operaciones</b> copiadas de la tabla de Cuenta Corriente de Bull Market (seleccioná las filas en la web, copiá y pegá acá). Lo que ya tengas cargado se omite solo.
-            </div>
-            <textarea id="bi-paste-text" rows="5" placeholder="Liquida&#9;Operado&#9;Comprobante&#9;Numero&#9;Cantidad&#9;Especie&#9;Precio&#9;Importe&#9;Saldo&#9;Referencia" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-family:var(--mono);font-size:.68rem;padding:6px 8px"></textarea>
-            <div style="display:flex;gap:10px;align-items:center;margin-top:6px;flex-wrap:wrap">
-              <select id="bi-paste-moneda" style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-family:var(--mono);font-size:.72rem;padding:4px 6px">
-                <option value="auto">Moneda: automática</option><option value="pesos">Pesos</option><option value="dolar">Dólar</option><option value="cable">Dólar Cable</option>
-              </select>
-              <button class="btn btn-a btn-sm" onclick="biPegarProcesar()">Procesar lo pegado</button>
-            </div>
-          </div>
-          <div style="margin-bottom:1rem;padding:.7rem .8rem;border:1px solid var(--border2);border-radius:var(--rsm)">
-            <div style="font-size:.72rem;color:var(--text2);margin-bottom:6px">
-              <b>Conciliar con tu cartera de Bull:</b> pegá la tabla de tenencias de Bull (ticker, cantidad, precio, PPC…). Compara con la página y propone movimientos de ajuste con <b>precio estimado</b> (parte que falta o sobra), para que cantidades y PPC queden iguales. Revisás y aplicás vos.
-            </div>
-            <textarea id="cn-text" rows="5" placeholder="Pegá acá las tenencias de Bull (Acciones, Cedears, Bonos…)" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-family:var(--mono);font-size:.68rem;padding:6px 8px"></textarea>
-            <div style="margin-top:6px"><button class="btn btn-a btn-sm" onclick="cnComparar()">Comparar con Bull</button></div>
-            <div id="cn-status" style="margin-top:8px;font-size:.72rem"></div>
-            <div id="cn-out"></div>
-          </div>
+          <textarea id="bi-paste-text" rows="5" placeholder="Liquida&#9;Operado&#9;Comprobante&#9;Numero&#9;Cantidad&#9;Especie&#9;Precio&#9;Importe&#9;Saldo&#9;Referencia" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-family:var(--mono);font-size:.68rem;padding:6px 8px"></textarea>
+          <div style="margin-top:6px"><button class="btn btn-a btn-sm" onclick="biProcesarTodo()">Procesar</button></div>
+          <div id="bi-chunks" style="margin-top:10px"></div>
           <div id="bi-tickers-wrap" style="display:none;margin-bottom:1rem">
             <div style="font-size:.72rem;color:var(--text2);margin-bottom:8px">
               Encontré tickers que no tengo clasificados todavía. Elegí el mercado de cada uno antes de importar (afecta cómo se calcula el costo/PPC):
@@ -1186,6 +1157,15 @@ html.nv-pre #page-portafolio::before{content:"Cargando cartera…";display:block
           </div>
           <div id="bi-preview"></div>
           <div id="bi-status" style="margin-top:10px;font-size:.75rem"></div>
+          <div style="margin-top:1.4rem;padding-top:1rem;border-top:1px solid var(--border2)">
+            <div style="font-size:.72rem;color:var(--text2);margin-bottom:6px">
+              <b>Conciliar con tu cartera de Bull:</b> pegá la tabla de tenencias de Bull (ticker, cantidad, precio, PPC…). Compara con la página y propone movimientos de ajuste con <b>precio estimado</b> (parte que falta o sobra), para que cantidades y PPC queden iguales. Revisás y aplicás vos.
+            </div>
+            <textarea id="cn-text" rows="5" placeholder="Pegá acá las tenencias de Bull (Acciones, Cedears, Bonos…)" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-family:var(--mono);font-size:.68rem;padding:6px 8px"></textarea>
+            <div style="margin-top:6px"><button class="btn btn-a btn-sm" onclick="cnComparar()">Comparar con Bull</button></div>
+            <div id="cn-status" style="margin-top:8px;font-size:.72rem"></div>
+            <div id="cn-out"></div>
+          </div>
           <div style="margin-top:1.4rem;padding-top:1rem;border-top:1px solid var(--border2)">
             <div style="font-size:.72rem;color:var(--text2);margin-bottom:8px">
               Si algunos movimientos quedaron sin CCL/MEP para su fecha (huecos en el histórico), completalos acá antes de recategorizar tickers:
@@ -1269,7 +1249,7 @@ window.PORTFOLIO_CONFIG={
 };
 </script>
 <script src="../comun/datos.js?d=8"></script>
-<script src="../comun/portafolio.js?v=2828"></script>
+<script src="../comun/portafolio.js?v=2829"></script>
 <script>
 (function(){
   var LS_KEY='ptMarcos_inicio';
