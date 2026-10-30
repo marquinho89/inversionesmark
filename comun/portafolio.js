@@ -12316,7 +12316,7 @@ function nvPlanSalida(){if(!CFG.simRetiro&&!CFG.planSalida)return;var cw=documen
    (top?'<br><span style="color:var(--text3)">Mayores aportes:</span> <span class="port-sensitive">'+top+'</span>':'')+'</div></div>';}
 
 // ─── 🔔 Avisos push (CFG.push) ─────────────────────────────────────────────────
-var VAPID_PUB='BP6CJHf5i2nKacdBN9fVoFcjZ51gozu_-YY8Xg1fZPD-GaGezoyGrzARFUz9k6KzWlytWcssXGCFyOT7CyXyR2w';
+var VAPID_PUB=''; // Avisos push apagados (CFG.push): hace falta generar tu propia clave VAPID y desplegar la función 'avisos' en tu Supabase.
 function _b64u(s){var p='='.repeat((4-s.length%4)%4),b=(s+p).replace(/-/g,'+').replace(/_/g,'/'),r=atob(b),o=new Uint8Array(r.length);for(var i=0;i<r.length;i++)o[i]=r.charCodeAt(i);return o;}
 function pushSoportado(){return 'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;}
 function _esIOS(){return /iPad|iPhone|iPod/.test(navigator.userAgent);}

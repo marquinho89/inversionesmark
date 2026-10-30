@@ -48,20 +48,9 @@ begin
   end if;
 end $$;
 
--- 4) "Oye Siri, mi cartera" (opcional): resumen hablado que lee un atajo del iPhone con un código secreto
-create table if not exists public.siri_resumen (
-  token text primary key,
-  data  jsonb not null,
-  ts    timestamptz not null default now()
-);
-create or replace function public.siri(p_token text) returns jsonb
-language sql security definer set search_path = public as $$
-  select coalesce((select data from siri_resumen where token = p_token),
-                  jsonb_build_object('texto', 'No encontré tu cartera. Revisá el código del atajo.'))
-$$;
-revoke all on function public.siri(text) from public;
-grant execute on function public.siri(text) to anon, authenticated;
-
+-- 4) (Quitado) "Oye Siri": se elimina la función y la tabla si existían, para no dejar una puerta abierta sin login.
+drop function if exists public.siri(text);
+drop table if exists public.siri_resumen;
 
 -- 5) Historial de precios por activo: una fila por fecha, con los precios de todos los tickers en "precios"
 create table if not exists public.precios_hist (
@@ -77,13 +66,12 @@ alter table public.precios_hist enable row level security;
 alter table public.movimientos  enable row level security;
 alter table public.trk_divs     enable row level security;
 alter table public.config       enable row level security;
-alter table public.siri_resumen enable row level security;
 
-grant select, insert, update, delete on public.movimientos, public.trk_divs, public.config, public.siri_resumen, public.precios_hist to authenticated;
-revoke select, insert, update, delete on public.movimientos, public.trk_divs, public.config, public.siri_resumen, public.precios_hist from anon;
+grant select, insert, update, delete on public.movimientos, public.trk_divs, public.config, public.precios_hist to authenticated;
+revoke select, insert, update, delete on public.movimientos, public.trk_divs, public.config, public.precios_hist from anon;
 
 do $$ declare t text; begin
-  foreach t in array array['movimientos','trk_divs','config','siri_resumen','precios_hist'] loop
+  foreach t in array array['movimientos','trk_divs','config','precios_hist'] loop
     execute format('drop policy if exists "app: acceso total" on public.%I', t);
     execute format('drop policy if exists "authenticated full access" on public.%I', t);
     execute format('drop policy if exists "solo mi email" on public.%I', t);
