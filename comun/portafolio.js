@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2844, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2845, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2845 | 2026-10-31 | Grandes fondos: se saca Scion (Burry, dado de baja) y se suman Baupost (Klarman) y Duquesne (Druckenmiller). Hay que volver a subir la función fondos13f.',
   'v2844 | 2026-10-31 | Balances: la sorpresa de los últimos 4 balances usa la mediana, para que estimados cercanos a cero no la distorsionen.',
   'v2843 | 2026-10-31 | Nueva pantalla "Grandes fondos": carteras 13F de Berkshire, Pershing Square, Himalaya y Scion comparadas con la tuya (requiere subir la función fondos13f).',
   'v2842 | 2026-10-31 | Balances: sorpresa % del EPS, comparación de ingresos, historial de los últimos 4 balances y reacción del precio a 1 y 3 días.',
@@ -12799,7 +12800,7 @@ function gfRender(){
     '<div style="padding:0 .2rem .4rem;font-size:.7rem;color:var(--text3)">Carteras que los fondos presentan cada trimestre ante la SEC (formulario 13F). Tienen entre 1 y 4 meses de atraso y solo incluyen acciones y ETF de EE.UU. en posición larga: no muestran bonos, efectivo ni posiciones cortas, y las opciones se excluyen. Es una lista para estudiar, no una recomendación.</div>'+
     (GF.msg?'<div style="padding:.2rem .2rem .5rem;font-size:.74rem;color:var(--amber)">'+GF.msg+'</div>':'')+(extra||'')+'</div>';};
   if(!GF.d||!(GF.d.fondos||[]).length){pg.innerHTML=head('<div style="padding:.8rem .2rem;font-size:.78rem;color:var(--text2)">Todavía no hay datos. Subí la función <b>fondos13f</b> a Supabase (Edge Functions) y tocá ⟳.</div>');return;}
-  var F=GF.d.fondos,act=F.filter(_gfActivo),inact=F.filter(function(f){return !_gfActivo(f);});
+  var F=GF.d.fondos.filter(function(f){return f.id!=='scn';}),act=F.filter(_gfActivo),inact=F.filter(function(f){return !_gfActivo(f);});
   var mi=gfMias(),M=mi.m,nM=Object.keys(M).length;
   var th='style="text-align:left;padding:6px 8px;font-size:.62rem;color:var(--text3);font-weight:600;border-bottom:1px solid var(--border)"',td='style="padding:7px 8px;border-bottom:1px solid var(--border);font-size:.76rem"';
   // mapa por fondo: ticker → posición, con peso y variación contra el trimestre anterior

@@ -22,7 +22,8 @@ const FONDOS = [
   { id: "brk", nombre: "Berkshire Hathaway (Buffett)", corto: "Berkshire", cik: "1067983", chk: /berkshire/i },
   { id: "psq", nombre: "Pershing Square (Ackman)", corto: "Pershing", cik: "1336528", chk: /pershing/i },
   { id: "him", nombre: "Himalaya Capital (Li Lu)", corto: "Himalaya", cik: "1709323", chk: /himalaya/i },
-  { id: "scn", nombre: "Scion (Burry)", corto: "Scion", cik: "1649339", chk: /scion/i },
+  { id: "bau", nombre: "Baupost Group (Klarman)", corto: "Baupost", cik: "1061768", chk: /baupost/i },
+  { id: "duq", nombre: "Duquesne Family Office (Druckenmiller)", corto: "Duquesne", cik: "1536411", chk: /duquesne/i },
 ];
 const TOP = 60; // posiciones que se guardan por fondo
 

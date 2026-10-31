@@ -99,6 +99,6 @@ Normalmente alcanza con reemplazar los archivos de `comun/` y subir el número `
 - Las funciones de carteras familiares (vista familiar, sync entre carteras, honorarios) están apagadas en esta copia. Los avisos push están activos: ver `supabase/functions/avisos` y `supabase_avisos.sql`.
 
 ## Grandes fondos (13F de la SEC)
-La pantalla "Grandes fondos" compara tu cartera de acciones con las carteras públicas de Berkshire, Pershing Square, Himalaya y Scion.
+La pantalla "Grandes fondos" compara tu cartera de acciones con las carteras públicas de Berkshire, Pershing Square, Himalaya, Baupost y Duquesne.
 Para activarla, subí la función `supabase/functions/fondos13f` (Edge Functions → Deploy; usa el secreto `ALLOWED_EMAIL` que ya cargaste para "avisos")
 y tocá ⟳ en la pantalla. Si tarda y queda con tickers sin resolver, volvé a tocar ⟳. Los datos se actualizan una vez por trimestre (los fondos presentan hasta 45 días después del cierre).
