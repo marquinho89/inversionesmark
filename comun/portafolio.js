@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2835, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2836, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2836 | 2026-10-30 | ¿Cara o barata?: suma P/E proyectado, PEG, P/FCF y flujo de caja libre por acción; la etiqueta combina varios indicadores.',
   'v2835 | 2026-10-30 | Backup: la descarga incluye precios_hist y se puede restaurar desde un archivo .json.',
   'v2834 | 2026-10-30 | Análisis de decisiones: excluye ajustes y vencimientos, efecto disposición (Odean), % por monto, comisión en el plan, grupos que explican la diferencia y opción de incluir extremos.',
   'v2833 | 2026-10-30 | El botón de modo negro aparece también en la vista nueva.',
@@ -11566,21 +11567,29 @@ var _valT=0,VAL=(function(){try{return JSON.parse(localStorage.getItem('val_v1')
 function _valOn(){return CFG.valuacion!==false;}
 function _valOk(o){return o&&o.rv&&['nyse','europa','china','brasil'].indexOf(o.s)>=0;}
 function _valMed(a){a=a.filter(function(v){return v!=null&&isFinite(v)&&v>0;}).sort(function(x,y){return x-y;});if(!a.length)return null;var m=Math.floor(a.length/2);return a.length%2?a[m]:(a[m-1]+a[m])/2;}
-function _valDe(t){var v=VAL[t];if(!v||v.px==null)return null;var r={pe:v.pe,med:v.med,hi:v.hi,lo:v.lo,px:v.px,dy:v.dy,dif:null,est:'sin',pos:null,dmax:null};
-  if(v.pe>0&&v.med>0){r.dif=(v.pe/v.med-1)*100;r.est=r.dif<=-15?'barata':r.dif>=15?'cara':'normal';}
+function _valDe(t){var v=VAL[t];if(!v||v.px==null)return null;var r={pe:v.pe,med:v.med,hi:v.hi,lo:v.lo,px:v.px,dy:v.dy,dif:null,est:'sin',pos:null,dmax:null,fpe:v.fpe||null,pfcf:v.pfcf||null,medf:v.medf||null,g5:v.g5||null,peg:null,fcfps:null,fcfy:null,votos:[]};
+  var difs=[],voto=function(n,x,m,d){if(x>0&&m>0){var df=(x/m-1)*100;difs.push(df);r.votos.push({n:n,x:x,m:m,df:df,s:df<=-15?-1:df>=15?1:0});}};
+  voto('P/E',v.pe,v.med);voto('P/FCF',v.pfcf,v.medf);
+  if(difs.length)r.dif=difs.reduce(function(s,x){return s+x;},0)/difs.length;
+  // PEG histórico: P/E ÷ crecimiento anual de ganancias de los últimos 5 años (con menos de 3% de crecimiento no tiene sentido)
+  if(v.pe>0&&v.g5>=3){r.peg=v.pe/v.g5;r.votos.push({n:'PEG',x:r.peg,m:null,df:null,s:r.peg<1?-1:r.peg>2?1:0});}
+  if(v.pfcf>0&&v.px>0){r.fcfps=v.px/v.pfcf;r.fcfy=100/v.pfcf;}
+  if(r.votos.length){var av=r.votos.reduce(function(s,z){return s+z.s;},0)/r.votos.length;r.est=av<=-0.34?'barata':av>=0.34?'cara':'normal';}
   if(v.hi>0&&v.lo>0&&v.hi>v.lo&&v.px>=v.lo*.8&&v.px<=v.hi*1.25){r.pos=Math.max(0,Math.min(100,(v.px-v.lo)/(v.hi-v.lo)*100));r.dmax=(v.px/v.hi-1)*100;}return r;}
-function _valPill(x){if(!x)return '<span style="color:var(--text3)">—</span>';var f=function(n){return (n>0?'+':'−')+Math.abs(Math.round(n))+'%';};
-  if(x.est==='sin')return '<span class="vpl vsn" title="Sin P/E: ETF o empresa sin ganancias">sin P/E</span>';
-  return '<span class="vpl v'+x.est+'" title="P/E '+x.pe.toFixed(1).replace('.',',')+' contra su mediana de 5 años '+x.med.toFixed(1).replace('.',',')+'">'+(x.est==='barata'?'barata ':x.est==='cara'?'cara ':'normal ')+f(x.dif)+'</span>';}
+function _valPill(x){if(!x)return '<span style="color:var(--text3)">—</span>';var f=function(n){return (n>0?'+':'−')+Math.abs(Math.round(n))+'%';},c1=function(n){return n.toFixed(1).replace('.',',');};
+  if(x.est==='sin')return '<span class="vpl vsn" title="Sin datos de valuación: ETF o empresa sin ganancias">sin datos</span>';
+  var tip=x.votos.map(function(z){return z.n==='PEG'?'PEG '+z.x.toFixed(2).replace('.',',')+' ('+(z.s<0?'menos de 1':z.s>0?'más de 2':'entre 1 y 2')+')':z.n+' '+c1(z.x)+' contra su mediana de 5 años '+c1(z.m)+' ('+f(z.df)+')';}).join(' · ')+' · Cada indicador vota barata, normal o cara y la etiqueta es el promedio.';
+  return '<span class="vpl v'+x.est+'" title="'+tip+'">'+(x.est==='barata'?'barata ':x.est==='cara'?'cara ':'normal ')+(x.dif!=null?f(x.dif):'')+(x.votos.length>1?' <span style="opacity:.7;font-weight:400">·'+x.votos.length+'</span>':'')+'</span>';}
 async function valCargar(){if(_valRun||!_valOn())return;_valRun=true;
   try{var seen={},L=NV_ROWS.filter(function(o){if(!_valOk(o)||seen[o.t])return false;seen[o.t]=1;return true;}).map(function(o){return o.t;});
-    var P=L.filter(function(t){return !VAL[t]||Date.now()-VAL[t].ts>20*3600e3;});_valProg=P.length?[0,P.length]:null;
+    var P=L.filter(function(t){return !VAL[t]||!VAL[t].v||Date.now()-VAL[t].ts>20*3600e3;});_valProg=P.length?[0,P.length]:null;
     for(var i=0;i<P.length;i++){var t=P[i],s=getFinnhubTicker(t);
       try{var m=await (await fetchWithTimeout(FBASE+'/stock/metric?symbol='+encodeURIComponent(s)+'&metric=all&token='+FKEY,{},10000)).json();
         var q=await (await fetchWithTimeout(FBASE+'/quote?symbol='+encodeURIComponent(s)+'&token='+FKEY,{},10000)).json();
         var M=(m&&m.metric)||{},ser=((m&&m.series&&m.series.annual&&m.series.annual.pe)||[]).slice(0,5).map(function(x){return x.v;});
-        VAL[t]={ts:Date.now(),s:s,pe:M.peTTM||M.peBasicExclExtraTTM||null,med:_valMed(ser),hi:M['52WeekHigh']||null,lo:M['52WeekLow']||null,px:(q&&q.c>0)?q.c:null,dy:M.currentDividendYieldTTM||null};
-      }catch(e){VAL[t]={ts:Date.now(),s:s,px:null};}
+        var serF=((m&&m.series&&m.series.annual&&m.series.annual.pfcf)||[]).slice(0,5).map(function(x){return x.v;});
+        VAL[t]={v:2,ts:Date.now(),s:s,fpe:M.forwardPE||null,pfcf:M.pfcfShareTTM||null,medf:_valMed(serF),g5:M.epsGrowth5Y||null,pe:M.peTTM||M.peBasicExclExtraTTM||null,med:_valMed(ser),hi:M['52WeekHigh']||null,lo:M['52WeekLow']||null,px:(q&&q.c>0)?q.c:null,dy:M.currentDividendYieldTTM||null};
+      }catch(e){VAL[t]={v:2,ts:Date.now(),s:s,px:null};}
       _valProg=[i+1,P.length];if(i%4===3){try{localStorage.setItem('val_v1',JSON.stringify(VAL));}catch(e){}nvVal();}
       await new Promise(function(r){setTimeout(r,2500);});}
   }finally{_valRun=false;_valProg=null;try{localStorage.setItem('val_v1',JSON.stringify(VAL));}catch(e){}nvVal();}}
@@ -11588,20 +11597,25 @@ function valTog(){NV.vc=!NV.vc;nvSave();nvVal();}
 function nvVal(){if(!_valOn())return;var cw=document.getElementById('nv-cards');if(!cw||!NV_ROWS.length)return;
   var card=document.getElementById('nv-val');if(!card){card=document.createElement('div');card.className='card';card.id='nv-val';card.style.cssText='margin-top:1rem';}cw.insertBefore(card,document.getElementById('nv-linea'));
   var seen={},R=NV_ROWS.filter(function(o){if(!_valOk(o)||seen[o.t])return false;seen[o.t]=1;return true;});if(!R.length){card.style.display='none';return;}card.style.display='';
-  var falta=R.some(function(o){return !VAL[o.t]||Date.now()-VAL[o.t].ts>20*3600e3;});if(falta&&!_valRun&&!_valT)_valT=setTimeout(function(){_valT=0;valCargar();},4000);
+  var falta=R.some(function(o){return !VAL[o.t]||!VAL[o.t].v||Date.now()-VAL[o.t].ts>20*3600e3;});if(falta&&!_valRun&&!_valT)_valT=setTimeout(function(){_valT=0;valCargar();},4000);
   var X=R.map(function(o){return {o:o,x:_valDe(o.t)};}),n={barata:0,cara:0};X.forEach(function(z){if(z.x&&n[z.x.est]!=null)n[z.x.est]++;});
   X.sort(function(a,b){var da=a.x&&a.x.dif!=null?a.x.dif:999,db=b.x&&b.x.dif!=null?b.x.dif:999;return da-db;});
   var nf=function(v,d){return v==null?'—':v.toLocaleString('es-AR',{minimumFractionDigits:d,maximumFractionDigits:d});};
   var col=NV.vc===true;
   var rows=X.map(function(z){var x=z.x,o=z.o;return '<tr><td><b class="nvtk"'+(typeof _focoOn==='function'&&_focoOn()?' style="cursor:pointer" onclick="nvFoco(\''+o.t+'\')"':'')+'>'+o.t+'</b>'+(VAL[o.t]&&VAL[o.t].s&&VAL[o.t].s!==o.t?' <span style="color:var(--text3);font-size:.62rem">'+VAL[o.t].s+'</span>':'')+'</td>'+
-    '<td class="r">'+(x?nf(x.px,2):'<span style="color:var(--text3)">…</span>')+'</td><td class="r">'+(x&&x.pe>0?nf(x.pe,1):'—')+'</td><td class="r vhm">'+(x&&x.med?nf(x.med,1):'—')+'</td><td>'+_valPill(x)+'</td>'+
+    '<td class="r">'+(x?nf(x.px,2):'<span style="color:var(--text3)">…</span>')+'</td><td class="r">'+(x&&x.pe>0?nf(x.pe,1):'—')+'</td><td class="r vhm">'+(x&&x.med?nf(x.med,1):'—')+'</td>'+
+    '<td class="r vhm">'+(x&&x.fpe>0?nf(x.fpe,1):'—')+'</td>'+
+    '<td class="r" style="color:'+(x&&x.peg!=null?(x.peg<1?'#22c55e':x.peg>2?'#ef4444':'var(--text)'):'var(--text3)')+'"'+(x&&x.peg!=null?' title="PEG = P/E dividido el crecimiento anual de ganancias de los últimos 5 años ('+nf(x.g5,1)+'%). Menos de 1 = barata, más de 2 = cara."':'')+'>'+(x&&x.peg!=null?nf(x.peg,2):'—')+'</td>'+
+    '<td class="r"'+(x&&x.medf?' title="Mediana de 5 años: '+nf(x.medf,1)+'"':'')+'>'+(x&&x.pfcf>0?nf(x.pfcf,1):'—')+'</td>'+
+    '<td class="r vhm"'+(x&&x.fcfy!=null?' title="Flujo de caja libre por acción; rinde '+nf(x.fcfy,1)+'% anual sobre el precio"':'')+'>'+(x&&x.fcfps!=null?nf(x.fcfps,2):'—')+'</td>'+
+    '<td>'+_valPill(x)+'</td>'+
     '<td>'+(x&&x.pos!=null?'<span class="vrg" title="52 semanas: '+nf(x.lo,2)+' – '+nf(x.hi,2)+'"><i style="left:'+x.pos.toFixed(0)+'%"></i></span>':'—')+'</td>'+
     '<td class="r" style="color:'+(x&&x.dmax!=null?(x.dmax<=-20?'#ef4444':x.dmax<=-5?'var(--text2)':'#f59e0b'):'var(--text3)')+'">'+(x&&x.dmax!=null?(x.dmax<0?'−':'')+Math.abs(x.dmax).toFixed(1).replace('.',',')+'%':'—')+'</td>'+
     '<td class="r vhm port-sensitive">USD '+_nvN(o.usd||0)+'</td></tr>';}).join('');
-  card.innerHTML='<div class="card-header" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;cursor:pointer" onclick="valTog()"><span style="color:var(--text3);font-size:.8rem;width:12px">'+(col?'▸':'▾')+'</span><span class="card-title">📊 ¿Cara o barata?</span><span class="tag">P/E de hoy vs su mediana de 5 años · rango de 52 semanas</span>'+
+  card.innerHTML='<div class="card-header" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;cursor:pointer" onclick="valTog()"><span style="color:var(--text3);font-size:.8rem;width:12px">'+(col?'▸':'▾')+'</span><span class="card-title">📊 ¿Cara o barata?</span><span class="tag">P/E, P/FCF y PEG vs su historia de 5 años · rango de 52 semanas</span>'+
     '<span style="margin-left:auto;font-family:var(--mono);font-size:.74rem;color:var(--text2)">'+(_valProg?'actualizando '+_valProg[0]+' de '+_valProg[1]+'… · ':'')+'<b style="color:#22c55e">'+n.barata+' baratas</b> · <b style="color:#ef4444">'+n.cara+' caras</b> de '+R.length+'</span></div>'+(col?'':
-    '<div style="padding:.3rem 0 .2rem;overflow-x:auto"><table class="itb vtb"><tr class="hh"><td>Acción</td><td class="r">Precio USD</td><td class="r">P/E hoy</td><td class="r vhm">Mediana 5 años</td><td>Valuación</td><td>Rango 52 sem.</td><td class="r">Desde el máx.</td><td class="r vhm">Tu posición</td></tr>'+rows+'</table></div>'+
-    '<div style="font-size:.7rem;color:var(--text3);line-height:1.5;padding:.2rem 0 .5rem">El P/E compara precio con ganancias: <b>"barata" no quiere decir "comprá"</b>, quiere decir que hoy se paga menos por cada dólar de ganancia que lo habitual para esa empresa (±15% = normal). Rayita: izquierda = cerca del mínimo del año, derecha = cerca del máximo. Precio de la acción en EE.UU. (no del Cedear). Datos de Finnhub, se actualizan una vez por día. Sin P/E = ETF o empresa sin ganancias.</div>');}
+    '<div style="padding:.3rem 0 .2rem;overflow-x:auto"><table class="itb vtb"><tr class="hh"><td>Acción</td><td class="r">Precio USD</td><td class="r">P/E hoy</td><td class="r vhm">Mediana 5 años</td><td class="r vhm">P/E proy.</td><td class="r">PEG</td><td class="r">P/FCF</td><td class="r vhm">FCF/acc.</td><td>Valuación</td><td>Rango 52 sem.</td><td class="r">Desde el máx.</td><td class="r vhm">Tu posición</td></tr>'+rows+'</table></div>'+
+    '<div style="font-size:.7rem;color:var(--text3);line-height:1.5;padding:.2rem 0 .5rem">El P/E compara precio con ganancias, el P/FCF con el flujo de caja libre (lo que la empresa realmente le queda en caja) y el PEG ajusta el P/E por cuánto crecen las ganancias (histórico de 5 años; menos de 1 barata, más de 2 cara). Cada indicador vota y la etiqueta es el promedio. <b>"barata" no quiere decir "comprá"</b>, quiere decir que hoy se paga menos por cada dólar de ganancia que lo habitual para esa empresa (±15% = normal). Rayita: izquierda = cerca del mínimo del año, derecha = cerca del máximo. Precio de la acción en EE.UU. (no del Cedear). Datos de Finnhub, se actualizan una vez por día. Sin P/E = ETF o empresa sin ganancias.</div>');}
 // Tipo de activo: Bono CER (ajusta por inflación), Bono HD (paga en dólares), RV (acciones y Cedears), Otros (pesos a tasa, dólar linked, FCI).
 function _nvTipo(o){if(o.rv)return 'rv';var t=String(o.t||'');
   if(/^(TX\d|TZX|TC\d|DICP|PARP|CUAP|DIP0|PR13)/.test(t))return 'cer';
