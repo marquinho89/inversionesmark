@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2843, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2844, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2844 | 2026-10-31 | Balances: la sorpresa de los últimos 4 balances usa la mediana, para que estimados cercanos a cero no la distorsionen.',
   'v2843 | 2026-10-31 | Nueva pantalla "Grandes fondos": carteras 13F de Berkshire, Pershing Square, Himalaya y Scion comparadas con la tuya (requiere subir la función fondos13f).',
   'v2842 | 2026-10-31 | Balances: sorpresa % del EPS, comparación de ingresos, historial de los últimos 4 balances y reacción del precio a 1 y 3 días.',
   'v2841 | 2026-10-30 | Importador de Cocos: la lista de filas ignoradas se muestra una sola vez.',
@@ -12694,7 +12695,7 @@ function _balIng(x,big){if(x.ra==null)return '—';var s=big(x.ra);if(x.re){var 
 function _balRacha(sym){
   var h=BAL.h[sym];if(!h){return BAL.hFail[sym]?'—':'<span class="mu">…</span>';}
   var v=(h.e||[]).filter(function(q){return q.a!=null&&q.s!=null;});if(!v.length)return '—';
-  var b=v.filter(function(q){return q.a>=q.s;}).length,sp=v.map(function(q){return q.sp!=null?q.sp:(q.s?(q.a-q.s)/Math.abs(q.s)*100:0);}),pr=sp.reduce(function(a,c){return a+c;},0)/sp.length;
+  var b=v.filter(function(q){return q.a>=q.s;}).length,sp=v.map(function(q){return q.sp!=null?q.sp:(q.s?(q.a-q.s)/Math.abs(q.s)*100:0);}),srt=sp.slice().sort(function(a,c){return a-c;}),pr=srt.length%2?srt[(srt.length-1)/2]:(srt[srt.length/2-1]+srt[srt.length/2])/2;
   return '<b style="color:'+(b>=v.length-1?'var(--accent)':b<=1?'var(--red)':'var(--amber)')+'">'+b+'/'+v.length+'</b> <span class="mu" style="font-size:.68rem">prom. '+_balPct(pr)+'</span>';}
 function _balReacCell(x){var r=BAL.r[x.s+'|'+x.f];if(r===undefined)return '<span class="mu">…</span>';if(!r)return '<span class="mu">—</span>';
   var c=function(v){return v==null?'—':'<b style="color:'+(v>=0?'var(--accent)':'var(--red)')+'">'+_balPct(v*100)+'</b>';};return c(r.d1)+' / '+c(r.d3);}
