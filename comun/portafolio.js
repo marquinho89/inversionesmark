@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2836, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2837, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2837 | 2026-10-30 | ¿Cara o barata?: botón ⓘ con la explicación de cada indicador.',
   'v2836 | 2026-10-30 | ¿Cara o barata?: suma P/E proyectado, PEG, P/FCF y flujo de caja libre por acción; la etiqueta combina varios indicadores.',
   'v2835 | 2026-10-30 | Backup: la descarga incluye precios_hist y se puede restaurar desde un archivo .json.',
   'v2834 | 2026-10-30 | Análisis de decisiones: excluye ajustes y vencimientos, efecto disposición (Odean), % por monto, comisión en el plan, grupos que explican la diferencia y opción de incluir extremos.',
@@ -11580,6 +11581,28 @@ function _valPill(x){if(!x)return '<span style="color:var(--text3)">—</span>';
   if(x.est==='sin')return '<span class="vpl vsn" title="Sin datos de valuación: ETF o empresa sin ganancias">sin datos</span>';
   var tip=x.votos.map(function(z){return z.n==='PEG'?'PEG '+z.x.toFixed(2).replace('.',',')+' ('+(z.s<0?'menos de 1':z.s>0?'más de 2':'entre 1 y 2')+')':z.n+' '+c1(z.x)+' contra su mediana de 5 años '+c1(z.m)+' ('+f(z.df)+')';}).join(' · ')+' · Cada indicador vota barata, normal o cara y la etiqueta es el promedio.';
   return '<span class="vpl v'+x.est+'" title="'+tip+'">'+(x.est==='barata'?'barata ':x.est==='cara'?'cara ':'normal ')+(x.dif!=null?f(x.dif):'')+(x.votos.length>1?' <span style="opacity:.7;font-weight:400">·'+x.votos.length+'</span>':'')+'</span>';}
+// Ayuda de la tarjeta "¿Cara o barata?": qué es cada columna (funciona en el celu, donde no hay mouse para los tooltips)
+function valAyuda(){
+  var o=document.getElementById('val-ayuda');
+  if(!o){o=document.createElement('div');o.id='val-ayuda';o.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px';
+    o.onclick=function(e){if(e.target===o)o.style.display='none';};document.body.appendChild(o);
+    document.addEventListener('keydown',function(e){if(e.key==='Escape')o.style.display='none';});}
+  var it=function(n,d){return '<div style="padding:8px 0;border-top:1px solid var(--border)"><b style="font-family:var(--mono);font-size:.8rem">'+n+'</b><div style="font-size:.78rem;color:var(--text2);line-height:1.55;margin-top:2px">'+d+'</div></div>';};
+  o.style.display='flex';
+  o.innerHTML='<div style="background:var(--surface);border:1px solid var(--border2);border-radius:14px;width:min(640px,100%);max-height:90vh;overflow:auto;padding:14px 16px;color:var(--text)">'+
+    '<div style="display:flex;align-items:center;gap:10px"><b style="font-size:1.02rem">📊 ¿Qué es cada cosa?</b><button class="btn btn-sm" style="margin-left:auto" onclick="document.getElementById(\'val-ayuda\').style.display=\'none\'">✕</button></div>'+
+    '<div style="font-size:.78rem;color:var(--text2);line-height:1.55;margin:6px 0 4px">Sirve para ver si una acción está cara o barata <b>frente a su propia historia</b>, no frente a otras empresas. Es una orientación, <b>no una recomendación de compra ni de venta</b>.</div>'+
+    it('Precio USD','Lo que cuesta la acción en EE.UU. (no el Cedear).')+
+    it('P/E hoy (precio / ganancias)','Cuántos dólares pagás por cada dólar de ganancia anual de la empresa. Un P/E de 20 significa que pagás 20 años de ganancias actuales. Más bajo = más barato, pero un P/E bajo también puede reflejar que el mercado espera malas noticias.')+
+    it('Mediana 5 años','El P/E típico de esa misma empresa en los últimos 5 años. Si hoy está por debajo, la acción está más barata que lo habitual para ella.')+
+    it('P/E proyectado','Igual que el P/E pero con las ganancias que los analistas esperan para el año próximo. Si es menor al P/E de hoy, se espera que las ganancias crezcan. No tiene historia para comparar.')+
+    it('PEG','El P/E dividido el crecimiento anual de ganancias de los últimos 5 años. Ajusta el P/E por cuánto crece la empresa: una acción con P/E alto puede ser razonable si crece muy rápido. <b>Menos de 1 = barata, entre 1 y 2 = normal, más de 2 = cara.</b> Es histórico (mira el pasado) y no se calcula si el crecimiento es menor al 3%.')+
+    it('P/FCF (precio / flujo de caja libre)','Como el P/E, pero usa el flujo de caja libre: el dinero que la empresa realmente le queda en caja después de pagar sus gastos e inversiones. Es más difícil de maquillar que las ganancias contables. Más bajo = más barato.')+
+    it('FCF/acc.','El flujo de caja libre por cada acción. Al pasar el mouse ves el rendimiento: qué % del precio es ese flujo por año (por ejemplo, USD 5 de flujo en una acción de USD 100 rinde 5%).')+
+    it('Valuación (barata / normal / cara)','Cada indicador (P/E, P/FCF y PEG) vota barata, normal o cara, y la etiqueta es el promedio. En P/E y P/FCF vota barata si está 15% o más debajo de su mediana, y cara si está 15% o más arriba. El porcentaje es cuánto se aleja de su historia y el número chico al lado es cuántos indicadores entraron.')+
+    it('Rango 52 sem. y Desde el máx.','La rayita muestra dónde está el precio entre el mínimo y el máximo del último año (izquierda = cerca del mínimo, derecha = cerca del máximo). "Desde el máx." es cuánto cayó desde ese máximo.')+
+    it('Tu posición','Cuántos dólares tenés en esa acción.')+
+    '<div style="font-size:.7rem;color:var(--text3);line-height:1.5;margin-top:8px;border-top:1px solid var(--border);padding-top:8px">Cuando un indicador contradice a otro, no es un error: suele indicar que las ganancias contables y el flujo de caja cuentan historias distintas. Datos de Finnhub, se actualizan una vez por día. Las acciones sin datos (ETF, empresas sin ganancias) muestran "—".</div></div>';}
 async function valCargar(){if(_valRun||!_valOn())return;_valRun=true;
   try{var seen={},L=NV_ROWS.filter(function(o){if(!_valOk(o)||seen[o.t])return false;seen[o.t]=1;return true;}).map(function(o){return o.t;});
     var P=L.filter(function(t){return !VAL[t]||!VAL[t].v||Date.now()-VAL[t].ts>20*3600e3;});_valProg=P.length?[0,P.length]:null;
@@ -11612,7 +11635,7 @@ function nvVal(){if(!_valOn())return;var cw=document.getElementById('nv-cards');
     '<td>'+(x&&x.pos!=null?'<span class="vrg" title="52 semanas: '+nf(x.lo,2)+' – '+nf(x.hi,2)+'"><i style="left:'+x.pos.toFixed(0)+'%"></i></span>':'—')+'</td>'+
     '<td class="r" style="color:'+(x&&x.dmax!=null?(x.dmax<=-20?'#ef4444':x.dmax<=-5?'var(--text2)':'#f59e0b'):'var(--text3)')+'">'+(x&&x.dmax!=null?(x.dmax<0?'−':'')+Math.abs(x.dmax).toFixed(1).replace('.',',')+'%':'—')+'</td>'+
     '<td class="r vhm port-sensitive">USD '+_nvN(o.usd||0)+'</td></tr>';}).join('');
-  card.innerHTML='<div class="card-header" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;cursor:pointer" onclick="valTog()"><span style="color:var(--text3);font-size:.8rem;width:12px">'+(col?'▸':'▾')+'</span><span class="card-title">📊 ¿Cara o barata?</span><span class="tag">P/E, P/FCF y PEG vs su historia de 5 años · rango de 52 semanas</span>'+
+  card.innerHTML='<div class="card-header" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;cursor:pointer" onclick="valTog()"><span style="color:var(--text3);font-size:.8rem;width:12px">'+(col?'▸':'▾')+'</span><span class="card-title">📊 ¿Cara o barata?</span><button class="btn btn-sm" style="padding:0 8px;min-width:0" title="Qué es cada cosa" onclick="event.stopPropagation();valAyuda()">ⓘ</button><span class="tag">P/E, P/FCF y PEG vs su historia de 5 años · rango de 52 semanas</span>'+
     '<span style="margin-left:auto;font-family:var(--mono);font-size:.74rem;color:var(--text2)">'+(_valProg?'actualizando '+_valProg[0]+' de '+_valProg[1]+'… · ':'')+'<b style="color:#22c55e">'+n.barata+' baratas</b> · <b style="color:#ef4444">'+n.cara+' caras</b> de '+R.length+'</span></div>'+(col?'':
     '<div style="padding:.3rem 0 .2rem;overflow-x:auto"><table class="itb vtb"><tr class="hh"><td>Acción</td><td class="r">Precio USD</td><td class="r">P/E hoy</td><td class="r vhm">Mediana 5 años</td><td class="r vhm">P/E proy.</td><td class="r">PEG</td><td class="r">P/FCF</td><td class="r vhm">FCF/acc.</td><td>Valuación</td><td>Rango 52 sem.</td><td class="r">Desde el máx.</td><td class="r vhm">Tu posición</td></tr>'+rows+'</table></div>'+
     '<div style="font-size:.7rem;color:var(--text3);line-height:1.5;padding:.2rem 0 .5rem">El P/E compara precio con ganancias, el P/FCF con el flujo de caja libre (lo que la empresa realmente le queda en caja) y el PEG ajusta el P/E por cuánto crecen las ganancias (histórico de 5 años; menos de 1 barata, más de 2 cara). Cada indicador vota y la etiqueta es el promedio. <b>"barata" no quiere decir "comprá"</b>, quiere decir que hoy se paga menos por cada dólar de ganancia que lo habitual para esa empresa (±15% = normal). Rayita: izquierda = cerca del mínimo del año, derecha = cerca del máximo. Precio de la acción en EE.UU. (no del Cedear). Datos de Finnhub, se actualizan una vez por día. Sin P/E = ETF o empresa sin ganancias.</div>');}
