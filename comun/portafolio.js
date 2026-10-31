@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2837, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2838, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2838 | 2026-10-30 | Película y línea de tiempo: corrige la escala de bonos con historial de precios corto (salían ~100 veces más grandes).',
   'v2837 | 2026-10-30 | ¿Cara o barata?: botón ⓘ con la explicación de cada indicador.',
   'v2836 | 2026-10-30 | ¿Cara o barata?: suma P/E proyectado, PEG, P/FCF y flujo de caja libre por acción; la etiqueta combina varios indicadores.',
   'v2835 | 2026-10-30 | Backup: la descarga incluye precios_hist y se puede restaurar desde un archivo .json.',
@@ -12287,9 +12288,7 @@ async function _decOdean(){
   var ser={},cola=tks.slice();
   var tr=async function(){while(cola.length){var tk=cola.shift();try{var s=getSector(tk);ser[tk]=(s==='fci')?null:(await _phSerie(tk,s)).ser;}catch(e){ser[tk]=null;}}};
   await Promise.all([tr(),tr(),tr(),tr()]);
-  var k={};tks.forEach(function(tk){var S=ser[tk];if(!S||!S.length){k[tk]=null;return;}var R=[];
-    M.forEach(function(x){if(x.t!==tk)return;var px=_hpPx(S,x.f);if(px>0)R.push(x.u/x.q/px);});
-    if(!R.length){k[tk]=1;return;}R.sort(function(a,b){return a-b;});k[tk]=Math.pow(10,Math.round(Math.log10(R[Math.floor(R.length/2)])));});
+  var k={};tks.forEach(function(tk){var S=ser[tk];if(!S||!S.length){k[tk]=null;return;}k[tk]=_hpEscala(S,M.filter(function(x){return x.t===tk;}));});
   var pos={},RG=0,RL=0,PG=0,PL=0,dias=0,i=0;
   while(i<M.length){var f=M[i].f,j=i;while(j<M.length&&M[j].f===f)j++;var dia=M.slice(i,j),vend={};
     dia.forEach(function(x){if(x.tp==='venta'){var v=vend[x.t]||(vend[x.t]={q:0,u:0});v.q+=x.q;v.u+=x.u;}});
@@ -12856,10 +12855,17 @@ function _hpMovs(){
   return (movimientos||[]).filter(function(m){return m&&(m.tipo==='compra'||m.tipo==='venta')&&m.ticker&&+m.qty>0&&m.owner!=='cristian'&&(typeof CARTERA_ACTIVA==='undefined'||(m.cartera||'principal')===CARTERA_ACTIVA);})
     .map(function(m){return {m:m,f:_phIso(m.fecha),t:m.ticker,q:+m.qty,tp:m.tipo,u:_rotUSD(m)};}).filter(function(x){return x.f;}).sort(function(a,b){return a.f<b.f?-1:a.f>b.f?1:(+a.m.id||0)-(+b.m.id||0);});
 }
+// Escala de una serie de precios (por 100 VN, ratio del Cedear…) contra tus propias operaciones: potencia de 10 más cercana a
+// (precio de tu operación ÷ precio de la serie). Si la serie no tiene precio cerca de ninguna de tus operaciones (por ejemplo
+// un bono con historial corto), usa el punto de la serie más cercano en el tiempo: solo importa el orden de magnitud.
+function _hpEscala(S,Mt){var R=[];
+  Mt.forEach(function(x){if(!(x.u>0))return;var p=_hpPx(S,x.f);if(p>0)R.push(x.u/x.q/p);});
+  if(!R.length)Mt.forEach(function(x){if(!(x.u>0))return;var pt=S[0];for(var i=0;i<S.length;i++){if(S[i][0]<=x.f)pt=S[i];else break;}if(pt&&pt[1]>0)R.push(x.u/x.q/pt[1]);});
+  if(!R.length)return 1;R.sort(function(a,b){return a-b;});return Math.pow(10,Math.round(Math.log10(R[Math.floor(R.length/2)])));}
 async function hpDatos(onProg,forzar){
   if(HP.d&&!forzar)return HP.d;if(HP.cargando)return HP.cargando;
   var M=_hpMovs(),firma=M.length+'|'+(M.length?M[M.length-1].m.id:'')+'|'+_bkHoy();
-  if(!forzar){try{var c=JSON.parse(localStorage.getItem(PFX+'hp_v2')||'null');if(c&&c.firma===firma){HP.d=c;return c;}}catch(e){}}
+  if(!forzar){try{var c=JSON.parse(localStorage.getItem(PFX+'hp_v3')||'null');if(c&&c.firma===firma){HP.d=c;return c;}}catch(e){}}
   HP.cargando=(async function(){
     if(!M.length)return {sem:[],meses:[],ops:[],firma:firma};
     var tks=[];M.forEach(function(x){if(tks.indexOf(x.t)<0)tks.push(x.t);});
@@ -12867,9 +12873,7 @@ async function hpDatos(onProg,forzar){
     var trabajador=async function(){while(cola.length){var t=cola.shift();try{var s=getSector(t);ser[t]=(s==='fci')?null:(await _phSerie(t,s)).ser;}catch(e){ser[t]=null;}hechos++;if(onProg)onProg(hechos,tks.length);}};
     await Promise.all([trabajador(),trabajador(),trabajador(),trabajador()]);
     // escala de cada serie contra tus operaciones (por 100 VN, ratio, etc.)
-    var k={};tks.forEach(function(t){var S=ser[t];if(!S||!S.length){k[t]=null;return;}var R=[];
-      M.forEach(function(x){if(x.t!==t||!(x.u>0))return;var p=_hpPx(S,x.f);if(p>0)R.push(x.u/x.q/p);});
-      if(!R.length){k[t]=1;return;}R.sort(function(a,b){return a-b;});var med=R[Math.floor(R.length/2)];k[t]=Math.pow(10,Math.round(Math.log10(med)));});
+    var k={};tks.forEach(function(t){var S=ser[t];if(!S||!S.length){k[t]=null;return;}k[t]=_hpEscala(S,M.filter(function(x){return x.t===t;}));});
     // semanas desde el primer movimiento
     var d=new Date(M[0].f+'T12:00:00'),hoy=new Date(),q={},ult={},i=0,sem=[],meses=[],mesAct=null,ultPer=null;
     while(d<=hoy){
@@ -12890,7 +12894,7 @@ async function hpDatos(onProg,forzar){
       var nom=function(T){return Object.keys(T).sort(function(a,b){return T[b]-T[a];});};
       if(g.c>=lim)o.push({f:f,tp:'c',u:Math.round(g.c),tk:nom(g.tc)});if(g.v>=lim)o.push({f:f,tp:'v',u:Math.round(g.v),tk:nom(g.tv)});return o;}).reduce(function(a,b){return a.concat(b);},[]);
     var res={sem:sem,meses:meses,ops:ops,firma:firma};
-    try{localStorage.setItem(PFX+'hp_v2',JSON.stringify(res));}catch(e){}
+    try{localStorage.setItem(PFX+'hp_v3',JSON.stringify(res));}catch(e){}
     return res;
   })();
   try{HP.d=await HP.cargando;return HP.d;}finally{HP.cargando=null;}
