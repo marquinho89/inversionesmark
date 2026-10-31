@@ -59,6 +59,16 @@ create table if not exists public.precios_hist (
 );
 alter table public.precios_hist enable row level security;
 
+-- 6) Perfiles adicionales (otra cartera en la misma página): tablas propias para el perfil 2 y el perfil 3
+create table if not exists public.movimientos_p2 (id bigint primary key, data jsonb not null, updated_at timestamptz not null default now());
+create table if not exists public.trk_divs_p2    (id bigint primary key, data jsonb not null, updated_at timestamptz not null default now());
+create table if not exists public.movimientos_p3 (id bigint primary key, data jsonb not null, updated_at timestamptz not null default now());
+create table if not exists public.trk_divs_p3    (id bigint primary key, data jsonb not null, updated_at timestamptz not null default now());
+alter table public.movimientos_p2 enable row level security;
+alter table public.trk_divs_p2    enable row level security;
+alter table public.movimientos_p3 enable row level security;
+alter table public.trk_divs_p3    enable row level security;
+
 -- ═════════════════════════════════════════════════════════════════
 --  ACCESO — SOLO TU MAIL
 --  Solo entra quien inició sesión con marcos.g.della@gmail.com. Sin sesión (anon) no se lee ni se escribe nada.
@@ -67,13 +77,13 @@ alter table public.movimientos  enable row level security;
 alter table public.trk_divs     enable row level security;
 alter table public.config       enable row level security;
 
-revoke all on public.movimientos, public.trk_divs, public.config, public.precios_hist from anon;
-revoke truncate, references, trigger on public.movimientos, public.trk_divs, public.config, public.precios_hist from authenticated;
-grant select, insert, update, delete on public.movimientos, public.trk_divs, public.config, public.precios_hist to authenticated;
+revoke all on public.movimientos, public.trk_divs, public.config, public.precios_hist, public.movimientos_p2, public.trk_divs_p2, public.movimientos_p3, public.trk_divs_p3 from anon;
+revoke truncate, references, trigger on public.movimientos, public.trk_divs, public.config, public.precios_hist, public.movimientos_p2, public.trk_divs_p2, public.movimientos_p3, public.trk_divs_p3 from authenticated;
+grant select, insert, update, delete on public.movimientos, public.trk_divs, public.config, public.precios_hist, public.movimientos_p2, public.trk_divs_p2, public.movimientos_p3, public.trk_divs_p3 to authenticated;
 alter default privileges in schema public revoke all on tables from anon;
 
 do $$ declare t text; begin
-  foreach t in array array['movimientos','trk_divs','config','precios_hist'] loop
+  foreach t in array array['movimientos','trk_divs','config','precios_hist','movimientos_p2','trk_divs_p2','movimientos_p3','trk_divs_p3'] loop
     execute format('drop policy if exists "app: acceso total" on public.%I', t);
     execute format('drop policy if exists "authenticated full access" on public.%I', t);
     execute format('drop policy if exists "solo mi email" on public.%I', t);
