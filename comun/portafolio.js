@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2839, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2840, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2840 | 2026-10-30 | Importador: acepta el listado de Movimientos de Cocos Capital (compras, ventas, suscripciones, dividendos y rentas). El perfil de Soledad usa Cocos como broker.',
   'v2839 | 2026-10-30 | Perfiles: tocando el avatar se cambia de cartera o se agrega otra (cartera, movimientos, backups y configuración separados).',
   'v2838 | 2026-10-30 | Película y línea de tiempo: corrige la escala de bonos con historial de precios corto (salían ~100 veces más grandes).',
   'v2837 | 2026-10-30 | ¿Cara o barata?: botón ⓘ con la explicación de cada indicador.',
@@ -69,7 +70,7 @@ var PERFIL=(function(){try{var x=localStorage.getItem('perfil_activo');return /^
 var PERFIL_NOMBRE=(function(){try{return PERFIL==='principal'?null:(localStorage.getItem('perfil_nombre_'+PERFIL)||'Perfil');}catch(e){return 'Perfil';}})();
 var _NOMBRE_PRINCIPAL=CFG.nombre;
 if(PERFIL!=='principal'){CFG.lsPrefix=(CFG.lsPrefix||('pt'+String(CFG.id||'x')+'_'))+PERFIL+'_';CFG.trkSuffix=(CFG.trkSuffix||'')+'_'+PERFIL;CFG.wlKey=(CFG.wlKey||'wl_app_v1')+'_'+PERFIL;
-  CFG.dataVersion=(CFG.dataVersion||'v1')+'_'+PERFIL;CFG.nombre=PERFIL_NOMBRE;CFG.persona=PERFIL_NOMBRE;CFG.push=false;CFG.color=({p2:'#c084fc',p3:'#fbbf24'})[PERFIL];}
+  CFG.dataVersion=(CFG.dataVersion||'v1')+'_'+PERFIL;CFG.nombre=PERFIL_NOMBRE;CFG.persona=PERFIL_NOMBRE;CFG.push=false;CFG.color=({p2:'#c084fc',p3:'#fbbf24'})[PERFIL];CFG.broker='cocos';CFG.brokerNombre='Cocos';}
 var _SB_COMPART=['ratios','ratios_meta','ccl_override','mep_override','perfiles']; // datos de mercado: iguales para todos los perfiles
 function _sbK(k){return (PERFIL==='principal'||_SB_COMPART.indexOf(k)>=0)?k:'P_'+PERFIL+':'+k;}
 function _sbT(tb){return PERFIL==='principal'?tb:tb+'_'+PERFIL;}
@@ -1064,11 +1065,46 @@ function biRenderChunks(){
       +'<button class="btn btn-sm" onclick="biQuitarChunk('+c.id+')" title="Quitar">✕</button></div>';
   }).join('');
 }
+// ── Cocos Capital: el listado de "Movimientos" que se copia de la app/web viene en bloques de 7 líneas
+// (fecha operada, fecha de liquidación, operación, especie, estado, cantidad, importe). Se convierte a la misma tabla que usa
+// el importador de Bull (Pesos / Dólar / Dólar Cable) y el resto del proceso es igual. El precio sale de importe ÷ cantidad.
+function _biCocosARows(texto){
+  var L=String(texto||'').split(/\r?\n/).map(function(s){return s.trim();}).filter(Boolean);
+  var reF=/^(\d{2})\/(\d{2})\/(\d{4})$/,hdr=['Liquida','Operado','Comprobante','Numero','Cantidad','Especie','Precio','Importe','Saldo','Referencia'];
+  var out={pesos:[],dolar:[],cable:[]},n=0,ign={},vistas=0;
+  var num=function(s){var x=String(s).replace(/[^\d,.\-]/g,'');if(x.indexOf(',')>=0)x=x.replace(/\./g,'').replace(',','.');else if(/^-?\d{1,3}(\.\d{3})+$/.test(x))x=x.replace(/\./g,'');return parseFloat(x);};
+  var fd=function(s){var m=s.match(reF);return new Date(+m[3],+m[2]-1,+m[1]);};
+  for(var i=0;i+6<L.length;i++){
+    if(!reF.test(L[i])||!reF.test(L[i+1]))continue;
+    var op=L[i+2],esp=L[i+3].toUpperCase().replace(/[^A-Z0-9.\-_]/g,''),cant=num(L[i+5]),tot=L[i+6],usd=/US\$|U\$S/i.test(tot),imp=Math.abs(num(tot));
+    var f0=L[i],f1=L[i+1];i+=6;vistas++;
+    var comp=null,dest=usd?'dolar':'pesos';
+    if(/^(compraste|suscribiste)/i.test(op))comp=usd?'COMPRA PARIDAD':'COMPRA NORMAL';
+    else if(/^(vendiste|rescataste)/i.test(op))comp=usd?'VENTA PARIDAD':'VENTA';
+    else if(/^dividendos/i.test(op)){comp='DIVIDENDOS';dest=usd?'cable':'pesos';}
+    else if(/^renta/i.test(op)){comp='RENTA Y AMORTIZ';dest=usd?'dolar':'pesos';}
+    var esOp=/COMPRA|VENTA/.test(comp||'');
+    if(!comp||!esp||esp==='ARS'||esp==='USD'||esp==='EXT'||!(imp>0)||(esOp&&!(cant>0))){var k=op+(esp==='EXT'?' (transferencia)':'');ign[k]=(ign[k]||0)+1;continue;}
+    var num_='cocos:'+f0+':'+esp+':'+imp;
+    out[dest].push([fd(f1),fd(f0),comp,num_,esOp?cant:'',esp,esOp?imp/cant:'',imp,'','']);n++;
+  }
+  if(!vistas||!n&&!Object.keys(ign).length)return null;
+  var res={n:n,ign:ign,chunks:[]};
+  ['pesos','dolar','cable'].forEach(function(k){if(out[k].length)res.chunks.push({tipo:k,rows:[hdr].concat(out[k])});});
+  return res;
+}
+function _biEsCocos(txt){return /(^|\n)\s*(Compraste|Vendiste|Depositaste|Suscribiste|Rescataste|Dividendos)\s*(\n|$)/i.test(txt)&&/(^|\n)\s*\d{2}\/\d{2}\/\d{4}\s*\n\s*\d{2}\/\d{2}\/\d{4}\s*\n/.test(txt);}
 // Botón único "Procesar": toma el texto pegado (si hay) y todos los bloques cargados.
 async function biProcesarTodo(){
   var ta=document.getElementById('bi-paste-text'),st=document.getElementById('bi-status');
   var txt=ta?ta.value.trim():'';
-  if(txt){
+  if(txt&&_biEsCocos(txt)){
+    var cc=_biCocosARows(txt);
+    if(!cc||!cc.chunks.length){if(st){st.style.color='var(--red)';st.textContent='Reconocí el formato de Cocos pero no encontré compras, ventas ni cobros para importar.';}return;}
+    _biChunks=_biChunks.filter(function(c){return c.origen!=='pegado';});
+    var ig=Object.keys(cc.ign).map(function(k){return cc.ign[k]+' '+k;}).join(', ');
+    cc.chunks.forEach(function(c){_biChunks.push({id:++_biChunkSeq,origen:'pegado',name:'Cocos pegado'+(ig?' (se ignoran: '+ig+')':''),rows:c.rows,tipo:c.tipo});});
+  }else if(txt){
     var rows=_biPegarARows(txt);
     if(rows.length<2){if(st){st.style.color='var(--red)';st.textContent='No encontré filas en lo pegado. Copiá la tabla de Cuenta Corriente de Bull (con las columnas Liquida, Operado, Comprobante, Numero, Cantidad, Especie, Precio, Importe…).';}return;}
     _biChunks=_biChunks.filter(function(c){return c.origen!=='pegado';});
