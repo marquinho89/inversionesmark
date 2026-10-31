@@ -12696,7 +12696,7 @@ function _balRacha(sym){
   var h=BAL.h[sym];if(!h){return BAL.hFail[sym]?'—':'<span class="mu">…</span>';}
   var v=(h.e||[]).filter(function(q){return q.a!=null&&q.s!=null;});if(!v.length)return '—';
   var b=v.filter(function(q){return q.a>=q.s;}).length,sp=v.map(function(q){return q.sp!=null?q.sp:(q.s?(q.a-q.s)/Math.abs(q.s)*100:0);}),srt=sp.slice().sort(function(a,c){return a-c;}),pr=srt.length%2?srt[(srt.length-1)/2]:(srt[srt.length/2-1]+srt[srt.length/2])/2;
-  return '<b style="color:'+(b>=v.length-1?'var(--accent)':b<=1?'var(--red)':'var(--amber)')+'">'+b+'/'+v.length+'</b> <span class="mu" style="font-size:.68rem">prom. '+_balPct(pr)+'</span>';}
+  return '<b style="color:'+(b>=v.length-1?'var(--accent)':b<=1?'var(--red)':'var(--amber)')+'">'+b+'/'+v.length+'</b> <span class="mu" style="font-size:.68rem" title="Sorpresa mediana del EPS en los últimos balances (la mediana evita que un estimado casi en cero distorsione el número)">med. '+_balPct(pr)+'</span>';}
 function _balReacCell(x){var r=BAL.r[x.s+'|'+x.f];if(r===undefined)return '<span class="mu">…</span>';if(!r)return '<span class="mu">—</span>';
   var c=function(v){return v==null?'—':'<b style="color:'+(v>=0?'var(--accent)':'var(--red)')+'">'+_balPct(v*100)+'</b>';};return c(r.d1)+' / '+c(r.d3);}
 async function balReac(x){
