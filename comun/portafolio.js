@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2840, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2841, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2841 | 2026-10-30 | Importador de Cocos: la lista de filas ignoradas se muestra una sola vez.',
   'v2840 | 2026-10-30 | Importador: acepta el listado de Movimientos de Cocos Capital (compras, ventas, suscripciones, dividendos y rentas). El perfil de Soledad usa Cocos como broker.',
   'v2839 | 2026-10-30 | Perfiles: tocando el avatar se cambia de cartera o se agrega otra (cartera, movimientos, backups y configuración separados).',
   'v2838 | 2026-10-30 | Película y línea de tiempo: corrige la escala de bonos con historial de precios corto (salían ~100 veces más grandes).',
@@ -1103,7 +1104,7 @@ async function biProcesarTodo(){
     if(!cc||!cc.chunks.length){if(st){st.style.color='var(--red)';st.textContent='Reconocí el formato de Cocos pero no encontré compras, ventas ni cobros para importar.';}return;}
     _biChunks=_biChunks.filter(function(c){return c.origen!=='pegado';});
     var ig=Object.keys(cc.ign).map(function(k){return cc.ign[k]+' '+k;}).join(', ');
-    cc.chunks.forEach(function(c){_biChunks.push({id:++_biChunkSeq,origen:'pegado',name:'Cocos pegado'+(ig?' (se ignoran: '+ig+')':''),rows:c.rows,tipo:c.tipo});});
+    cc.chunks.forEach(function(c,ci){_biChunks.push({id:++_biChunkSeq,origen:'pegado',name:'Cocos pegado'+(ig&&!ci?' (se ignoran: '+ig+')':''),rows:c.rows,tipo:c.tipo});});
   }else if(txt){
     var rows=_biPegarARows(txt);
     if(rows.length<2){if(st){st.style.color='var(--red)';st.textContent='No encontré filas en lo pegado. Copiá la tabla de Cuenta Corriente de Bull (con las columnas Liquida, Operado, Comprobante, Numero, Cantidad, Especie, Precio, Importe…).';}return;}
