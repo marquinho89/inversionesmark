@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2841, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2842, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2842 | 2026-10-31 | Balances: sorpresa % del EPS, comparación de ingresos, historial de los últimos 4 balances y reacción del precio a 1 y 3 días.',
   'v2841 | 2026-10-30 | Importador de Cocos: la lista de filas ignoradas se muestra una sola vez.',
   'v2840 | 2026-10-30 | Importador: acepta el listado de Movimientos de Cocos Capital (compras, ventas, suscripciones, dividendos y rentas). El perfil de Soledad usa Cocos como broker.',
   'v2839 | 2026-10-30 | Perfiles: tocando el avatar se cambia de cartera o se agrega otra (cartera, movimientos, backups y configuración separados).',
@@ -12683,6 +12684,47 @@ function balBadge(ticker){
   var tip=(dd===0?'Presenta balance HOY':dd===1?'Presenta balance mañana':'Presenta balance en '+dd+' días')+' · '+_balFecha(x.f)+(_balHora[x.h]?' ('+_balHora[x.h]+')':'')+(x.ee!=null?' · EPS estimado '+x.ee:'');
   return '<span class="nvf nvbal" data-tip="'+tip.replace(/"/g,'&quot;')+'" onclick="event.stopPropagation();nvTip(this,true)">📊</span>';
 }
+// Datos extra: historial de los últimos 4 balances (Finnhub /stock/earnings) y reacción del precio tras el balance.
+var BAL_H_LS='bal_hist_v1';
+BAL.h=(function(){try{return JSON.parse(localStorage.getItem(BAL_H_LS)||'{}')||{};}catch(e){return {};}})();BAL.r={};BAL.hFail={};BAL.busy=false;
+function _balPct(v){return v==null||!isFinite(v)?'—':(v>=0?'+':'')+v.toLocaleString('es-AR',{maximumFractionDigits:1})+'%';}
+function _balIng(x,big){if(x.ra==null)return '—';var s=big(x.ra);if(x.re){var d=(x.ra-x.re)/Math.abs(x.re)*100,b=d>=0;s+=' <span style="color:'+(b?'var(--accent)':'var(--red)')+';font-size:.68rem">'+(b?'superó':'no llegó')+' '+_balPct(d)+'</span>';}return s;}
+function _balRacha(sym){
+  var h=BAL.h[sym];if(!h){return BAL.hFail[sym]?'—':'<span class="mu">…</span>';}
+  var v=(h.e||[]).filter(function(q){return q.a!=null&&q.s!=null;});if(!v.length)return '—';
+  var b=v.filter(function(q){return q.a>=q.s;}).length,sp=v.map(function(q){return q.sp!=null?q.sp:(q.s?(q.a-q.s)/Math.abs(q.s)*100:0);}),pr=sp.reduce(function(a,c){return a+c;},0)/sp.length;
+  return '<b style="color:'+(b>=v.length-1?'var(--accent)':b<=1?'var(--red)':'var(--amber)')+'">'+b+'/'+v.length+'</b> <span class="mu" style="font-size:.68rem">prom. '+_balPct(pr)+'</span>';}
+function _balReacCell(x){var r=BAL.r[x.s+'|'+x.f];if(r===undefined)return '<span class="mu">…</span>';if(!r)return '<span class="mu">—</span>';
+  var c=function(v){return v==null?'—':'<b style="color:'+(v>=0?'var(--accent)':'var(--red)')+'">'+_balPct(v*100)+'</b>';};return c(r.d1)+' / '+c(r.d3);}
+async function balReac(x){
+  var tk=x.t[0],k=x.s+'|'+x.f;if(BAL.r[k]!==undefined)return BAL.r[k];var res=null;
+  try{var o=await _phSerie(tk,getSector(tk)),ser=(o&&o.ser)||[],amc=x.h==='amc',ri=-1;
+    for(var i=0;i<ser.length;i++){if(amc?ser[i][0]>x.f:ser[i][0]>=x.f){ri=i;break;}}
+    if(ri>0){var base=ser[ri-1][1],gap=(new Date(ser[ri][0])-new Date(ser[ri-1][0]))/86400000;
+      if(base>0&&gap<=5)res={d1:ser[ri][1]/base-1,d3:ser[ri+2]?ser[ri+2][1]/base-1:null};}
+  }catch(e){}
+  BAL.r[k]=res;return res;
+}
+async function balExtra(L){
+  if(BAL.busy)return;var syms={};L.forEach(function(x){syms[x.s]=1;});
+  var ph=Object.keys(syms).filter(function(s){var h=BAL.h[s];return !BAL.hFail[s]&&(!h||Date.now()-h.ts>24*3600000);});
+  var pr=L.filter(function(x){return _balDias(x.f)<0&&BAL.r[x.s+'|'+x.f]===undefined;});
+  if(!ph.length&&!pr.length)return;BAL.busy=true;
+  try{
+    for(var i=0;i<pr.length;i++)await balReac(pr[i]);
+    var pg=document.getElementById('page-balances');if(pr.length&&pg&&pg.classList.contains('active')&&!ph.length){BAL.busy=false;balRender();return;}
+    for(var j=0;j<ph.length;j++){
+      try{var r=await fetchWithTimeout(FBASE+'/stock/earnings?symbol='+encodeURIComponent(ph[j])+'&limit=4&token='+FKEY,{},12000);
+        if(r.ok){var a=await r.json();BAL.h[ph[j]]={ts:Date.now(),e:(Array.isArray(a)?a:[]).map(function(q){return {p:q.period,a:q.actual,s:q.estimate,sp:q.surprisePercent};})};
+          try{localStorage.setItem(BAL_H_LS,JSON.stringify(BAL.h));}catch(e){}}
+        else{BAL.hFail[ph[j]]=1;if(r.status===429)break;}
+      }catch(e){BAL.hFail[ph[j]]=1;}
+      if(j%8===7){var p2=document.getElementById('page-balances');if(p2&&p2.classList.contains('active')){BAL.busy=false;balRender();BAL.busy=true;}}
+      await new Promise(function(res){setTimeout(res,1100);});
+    }
+  }finally{BAL.busy=false;}
+  var p3=document.getElementById('page-balances');if(p3&&p3.classList.contains('active'))balRender();
+}
 function balRender(){
   var pg=document.getElementById('page-balances');if(!pg)return;
   if(!BAL.d){pg.innerHTML='<div class="card"><div style="padding:1rem;color:var(--text3);font-size:.8rem">Cargando calendario de balances…</div></div>';balCargar().then(function(d){if(d)balRender();else pg.innerHTML='<div class="card"><div style="padding:1rem;color:var(--text3);font-size:.8rem">No se pudo bajar el calendario. Probá más tarde.</div></div>';});return;}
@@ -12692,18 +12734,19 @@ function balRender(){
   var th='style="text-align:left;padding:6px 8px;font-size:.62rem;color:var(--text3);font-weight:600;border-bottom:1px solid var(--border)"',td='style="padding:7px 8px;border-bottom:1px solid var(--border);font-size:.76rem"';
   var fila=function(x,pasado){var dd=_balDias(x.f),cerca=!pasado&&dd<=BAL_DIAS_AVISO;
     var cuando=pasado?(dd===-1?'ayer':'hace '+(-dd)+' días'):(dd===0?'<b style="color:var(--amber)">HOY</b>':dd===1?'<b style="color:var(--amber)">mañana</b>':'en '+dd+' días');
-    var res='';if(pasado&&x.ea!=null&&x.ee!=null){var b=x.ea>=x.ee;res='<span style="color:'+(b?'var(--accent)':'var(--red)')+';font-weight:700">'+(b?'superó':'no llegó')+'</span> <span class="mu">('+nf(x.ea)+' vs '+nf(x.ee)+')</span>';}
+    var res='';if(pasado&&x.ea!=null&&x.ee!=null){var b=x.ea>=x.ee;var sp=x.ee?(x.ea-x.ee)/Math.abs(x.ee)*100:null;res='<span style="color:'+(b?'var(--accent)':'var(--red)')+';font-weight:700">'+(b?'superó':'no llegó')+'</span> <span class="mu">('+nf(x.ea)+' vs '+nf(x.ee)+(sp!=null&&isFinite(sp)?' · '+_balPct(sp):'')+')</span>';}
     return '<tr'+(cerca?' style="background:color-mix(in srgb,var(--amber) 9%,transparent)"':'')+'><td '+td+'>'+(cerca?'📊 ':'')+_balFecha(x.f)+'</td><td '+td+'>'+cuando+'</td><td '+td+'><b style="font-family:var(--mono)">'+x.t.join(' / ')+'</b>'+(x.t.indexOf(x.s)<0?' <span class="mu" style="font-size:.66rem">('+x.s+')</span>':'')+'</td>'+
       '<td '+td+'>'+(_balHora[x.h]||'—')+'</td><td '+td+'>'+(x.q?'Q'+x.q+' '+(x.y||''):'—')+'</td>'+
-      (pasado?'<td '+td+'>'+res+'</td><td '+td+'>'+big(x.ra)+'</td>':'<td '+td+'>'+nf(x.ee)+'</td><td '+td+'>'+big(x.re)+'</td>')+'</tr>';};
+      (pasado?'<td '+td+'>'+res+'</td><td '+td+'>'+_balIng(x,big)+'</td><td '+td+'>'+_balRacha(x.s)+'</td><td '+td+'>'+_balReacCell(x)+'</td>':'<td '+td+'>'+nf(x.ee)+'</td><td '+td+'>'+big(x.re)+'</td><td '+td+'>'+_balRacha(x.s)+'</td>')+'</tr>';};
   var tabla=function(rows,pasado){return rows.length?'<div class="tw"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Fecha</th><th '+th+'>Cuándo</th><th '+th+'>Activo</th><th '+th+'>Horario</th><th '+th+'>Trimestre</th>'+
-    (pasado?'<th '+th+'>Resultado (EPS)</th><th '+th+'>Ingresos USD</th>':'<th '+th+'>EPS estimado</th><th '+th+'>Ingresos est. USD</th>')+'</tr></thead><tbody>'+rows.map(function(x){return fila(x,pasado);}).join('')+'</tbody></table></div>':'<div style="padding:.6rem 0;color:var(--text3);font-size:.76rem">'+(pasado?'Nada en los últimos 7 días.':'Ningún activo de tu cartera presenta balance en los próximos 60 días.')+'</div>';};
+    (pasado?'<th '+th+'>Resultado (EPS)</th><th '+th+'>Ingresos USD</th><th '+th+' title="Cuántos de los últimos 4 balances superaron el EPS estimado y la sorpresa promedio">Últimos 4 balances</th><th '+th+' title="Variación del precio desde el cierre previo al balance hasta la rueda siguiente (1 día) y 3 ruedas después. Precio en USD calculado con el dólar de cada día.">Reacción 1d / 3d</th>':'<th '+th+'>EPS estimado</th><th '+th+'>Ingresos est. USD</th><th '+th+' title="Cuántos de los últimos 4 balances superaron el EPS estimado y la sorpresa promedio">Últimos 4 balances</th>')+'</tr></thead><tbody>'+rows.map(function(x){return fila(x,pasado);}).join('')+'</tbody></table></div>':'<div style="padding:.6rem 0;color:var(--text3);font-size:.76rem">'+(pasado?'Nada en los últimos 7 días.':'Ningún activo de tu cartera presenta balance en los próximos 60 días.')+'</div>';};
   var act=new Date(BAL.d.ts);
   pg.innerHTML='<div class="card" style="margin-bottom:1rem"><div class="card-header" style="display:flex;align-items:center;gap:10px"><span class="card-title">📊 Calendario de balances</span>'+
     '<span class="mu" style="font-size:.66rem;margin-left:auto">Actualizado '+act.toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+'</span><button class="btn btn-sm" onclick="balActualizar(this)">⟳</button></div>'+
     '<div style="padding:0 .2rem .4rem;font-size:.7rem;color:var(--text3)">Próximos 60 días de los activos que tenés en cartera. Los que presentan en '+BAL_DIAS_AVISO+' días o menos llevan 📊 en el Portafolio. Solo empresas que cotizan en EE.UU. (los Cedears y las argentinas con ADR); los ETF y los bonos no presentan balance.</div>'+
     tabla(prox,false)+'</div>'+
     '<div class="card"><div class="card-header"><span class="card-title">Ya presentaron (últimos 7 días)</span></div>'+tabla(rec,true)+'</div>';
+  balExtra(L);
 }
 async function balActualizar(b){if(b)b.textContent='…';await balCargar(true);balRender();try{nvRender();}catch(e){}}
 function balInit(){if(document.getElementById('page-balances'))return;var pp=document.getElementById('page-portafolio'),mb=document.querySelector('.nav-item[onclick*="\'movimientos\'"]');if(!pp||!mb)return;
