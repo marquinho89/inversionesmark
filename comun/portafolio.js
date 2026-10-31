@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2842, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2843, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2843 | 2026-10-31 | Nueva pantalla "Grandes fondos": carteras 13F de Berkshire, Pershing Square, Himalaya y Scion comparadas con la tuya (requiere subir la función fondos13f).',
   'v2842 | 2026-10-31 | Balances: sorpresa % del EPS, comparación de ingresos, historial de los últimos 4 balances y reacción del precio a 1 y 3 días.',
   'v2841 | 2026-10-30 | Importador de Cocos: la lista de filas ignoradas se muestra una sola vez.',
   'v2840 | 2026-10-30 | Importador: acepta el listado de Movimientos de Cocos Capital (compras, ventas, suscripciones, dividendos y rentas). El perfil de Soledad usa Cocos como broker.',
@@ -73,7 +74,7 @@ var PERFIL_NOMBRE=(function(){try{return PERFIL==='principal'?null:(localStorage
 var _NOMBRE_PRINCIPAL=CFG.nombre;
 if(PERFIL!=='principal'){CFG.lsPrefix=(CFG.lsPrefix||('pt'+String(CFG.id||'x')+'_'))+PERFIL+'_';CFG.trkSuffix=(CFG.trkSuffix||'')+'_'+PERFIL;CFG.wlKey=(CFG.wlKey||'wl_app_v1')+'_'+PERFIL;
   CFG.dataVersion=(CFG.dataVersion||'v1')+'_'+PERFIL;CFG.nombre=PERFIL_NOMBRE;CFG.persona=PERFIL_NOMBRE;CFG.push=false;CFG.color=({p2:'#c084fc',p3:'#fbbf24'})[PERFIL];CFG.broker='cocos';CFG.brokerNombre='Cocos';}
-var _SB_COMPART=['ratios','ratios_meta','ccl_override','mep_override','perfiles']; // datos de mercado: iguales para todos los perfiles
+var _SB_COMPART=['ratios','ratios_meta','ccl_override','mep_override','perfiles','f13_datos']; // datos de mercado: iguales para todos los perfiles
 function _sbK(k){return (PERFIL==='principal'||_SB_COMPART.indexOf(k)>=0)?k:'P_'+PERFIL+':'+k;}
 function _sbT(tb){return PERFIL==='principal'?tb:tb+'_'+PERFIL;}
 var PFX=CFG.lsPrefix||('pt'+String(CFG.id||'x')+'_');
@@ -1687,6 +1688,7 @@ function showPage(id,btn){
   if(id==='arbitraje') arbRender();
   if(id==='rotaciones') rotRender();
   if(id==='balances') balRender();
+  if(id==='grandes') gfRender();
   if(id==='diario') diaRender();
   if(id==='noticias') nwsLoad(false);
   if(id==='flujos') setTimeout(renderFlujosPage, 50);
@@ -12755,6 +12757,94 @@ function balInit(){if(document.getElementById('page-balances'))return;var pp=doc
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',balInit);else setTimeout(balInit,0);
 (function _balBoot(n){setTimeout(function(){if(typeof _appInitDone!=='undefined'&&_appInitDone){balCargar().then(function(d){if(d){try{nvRender();}catch(e){}var pg=document.getElementById('page-balances');if(pg&&pg.classList.contains('active'))balRender();}});}else if(n<40)_balBoot(n+1);},2500);})(0);
 setInterval(function(){if(!document.hidden&&BAL.d&&Date.now()-BAL.d.ts>12*3600000)balCargar(true).then(function(){try{nvRender();}catch(e){}});},30*60000);
+
+// ─── 🏛 Grandes fondos (13F de la SEC) vs mi cartera ───────────────────────────────────────────────
+// La función "fondos13f" (Supabase) baja las carteras públicas que los fondos presentan cada trimestre ante la SEC y las deja en
+// config → "f13_datos". Acá se comparan con las acciones/Cedears que tenés. Los datos tienen entre 1 y 4 meses de atraso
+// y solo incluyen acciones y ETF de EE.UU. en posición larga (sin bonos, efectivo ni posiciones cortas).
+var GF={d:null,cargando:false,msg:''};
+var _GF_ALIAS={GOOG:'GOOGL',BRKA:'BRKB',BRKB:'BRKB'};
+function _gfNorm(t){t=String(t||'').toUpperCase().replace(/[^A-Z0-9]/g,'');return _GF_ALIAS[t]||t;}
+function _gfFmt(v){return v==null||!isFinite(v)?'—':v.toLocaleString('es-AR',{maximumFractionDigits:1})+'%';}
+function _gfActivo(f){return !!f&&f.periodo&&(Date.now()-new Date(f.periodo))/86400000<400;}
+function _gfFecha(iso){var p=String(iso||'').split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:'—';}
+async function gfCargar(){try{GF.d=await sbGetConfig('f13_datos');}catch(e){GF.d=null;}return GF.d;}
+// Mis acciones/Cedears con peso sobre el total de acciones (valor de hoy; si no hay precio, el costo)
+function gfMias(){
+  var out={},tot=0,hoy=CCL_HOY||1,mep=MEP_HOY||hoy;
+  getPositions().filter(function(p){return p.qty>0.000001;}).forEach(function(p){
+    var s=getSector(p.ticker);if(s==='bonos'||s==='on'||s==='fci')return;
+    var sym=(s==='argentina')?(BYMA_TO_NYSE[p.ticker]||null):getFinnhubTicker(p.ticker);if(!sym||/[.]BA$/i.test(sym))return;
+    var q=(typeof quotes!=='undefined')?quotes[p.ticker]:null,ratio=RATIOS_TABLE[p.ticker]||1,v;
+    if(q&&q.price)v=(s==='argentina'||BRL_TICKERS.has(p.ticker)||q.fromByma)?(q.price/hoy)*p.qty:(q.price/ratio)*p.qty;else v=p.costUSDpuro||0;
+    if(!(v>0))return;var k=_gfNorm(sym);if(!out[k])out[k]={sym:k,tk:[],v:0};out[k].tk.push(p.ticker);out[k].v+=v;tot+=v;});
+  Object.keys(out).forEach(function(k){out[k].w=tot>0?out[k].v/tot*100:0;});
+  return {m:out,tot:tot};
+}
+function _gfCedear(k){return Object.keys(RATIOS_TABLE).some(function(t){return _gfNorm(t)===k;})||Object.keys(TICKER_MAP).some(function(t){return _gfNorm(TICKER_MAP[t])===k;});}
+async function gfActualizar(b){
+  if(GF.cargando)return;GF.cargando=true;GF.msg='Bajando las carteras de la SEC… puede tardar 1–2 minutos.';gfRender();
+  try{var tok=window._sbAccessToken||'';
+    var r=await fetch(SUPABASE_URL+'/functions/v1/fondos13f',{method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(tok||SUPABASE_KEY),'x-user-token':tok,'Content-Type':'application/json'},body:'{}'});
+    var t=await r.text();if(!r.ok){GF.msg='La función falló ('+r.status+'): '+t.slice(0,200)+' ¿Ya subiste la función "fondos13f" a Supabase?';}
+    else{var d={};try{d=JSON.parse(t);}catch(e){}GF.msg=(d.sinTicker?d.sinTicker+' posiciones todavía sin ticker: volvé a apretar ⟳ para completarlas. ':'Listo. ')+((d.avisos||[]).join(' · '));await gfCargar();}
+  }catch(e){GF.msg='No se pudo llamar a la función: '+(e&&e.message||e);}
+  GF.cargando=false;gfRender();
+}
+function gfRender(){
+  var pg=document.getElementById('page-grandes');if(!pg)return;
+  if(!GF.d&&!GF.cargando&&!GF._pidio){GF._pidio=true;gfCargar().then(gfRender);pg.innerHTML='<div class="card"><div style="padding:1rem;color:var(--text3);font-size:.8rem">Cargando…</div></div>';return;}
+  var head=function(extra){return '<div class="card" style="margin-bottom:1rem"><div class="card-header" style="display:flex;align-items:center;gap:10px"><span class="card-title">🏛 Grandes fondos vs mi cartera</span><span class="mu" style="font-size:.66rem;margin-left:auto">'+(GF.d&&GF.d.ts?'Actualizado '+new Date(GF.d.ts).toLocaleDateString('es-AR'):'Sin datos')+'</span><button class="btn btn-sm" onclick="gfActualizar(this)"'+(GF.cargando?' disabled':'')+'>⟳</button></div>'+
+    '<div style="padding:0 .2rem .4rem;font-size:.7rem;color:var(--text3)">Carteras que los fondos presentan cada trimestre ante la SEC (formulario 13F). Tienen entre 1 y 4 meses de atraso y solo incluyen acciones y ETF de EE.UU. en posición larga: no muestran bonos, efectivo ni posiciones cortas, y las opciones se excluyen. Es una lista para estudiar, no una recomendación.</div>'+
+    (GF.msg?'<div style="padding:.2rem .2rem .5rem;font-size:.74rem;color:var(--amber)">'+GF.msg+'</div>':'')+(extra||'')+'</div>';};
+  if(!GF.d||!(GF.d.fondos||[]).length){pg.innerHTML=head('<div style="padding:.8rem .2rem;font-size:.78rem;color:var(--text2)">Todavía no hay datos. Subí la función <b>fondos13f</b> a Supabase (Edge Functions) y tocá ⟳.</div>');return;}
+  var F=GF.d.fondos,act=F.filter(_gfActivo),inact=F.filter(function(f){return !_gfActivo(f);});
+  var mi=gfMias(),M=mi.m,nM=Object.keys(M).length;
+  var th='style="text-align:left;padding:6px 8px;font-size:.62rem;color:var(--text3);font-weight:600;border-bottom:1px solid var(--border)"',td='style="padding:7px 8px;border-bottom:1px solid var(--border);font-size:.76rem"';
+  // mapa por fondo: ticker → posición, con peso y variación contra el trimestre anterior
+  var idx={};act.forEach(function(f){var prev={};(f.prev&&f.prev.pos||[]).forEach(function(p){if(p.t)prev[_gfNorm(p.t)]=p;});var o={};
+    f.pos.forEach(function(p){if(!p.t)return;var k=_gfNorm(p.t),w=f.tot>0?p.v/f.tot*100:0,pv=prev[k],ch=null;
+      if(!f.prev)ch=null;else if(!pv)ch='nueva';else if(pv.s>0){var d=(p.s-pv.s)/pv.s*100;ch=d>=5?'sube':d<=-5?'baja':'igual';}
+      o[k]={w:w,n:p.n,ch:ch,d:pv&&pv.s>0?(p.s-pv.s)/pv.s*100:null};});idx[f.id]=o;});
+  var chip=function(f,x){var fl=x.ch==='nueva'?'<span style="color:var(--accent)" title="Posición nueva este trimestre"> ★nueva</span>':x.ch==='sube'?'<span style="color:var(--accent)" title="Aumentó la cantidad de acciones"> ▲</span>':x.ch==='baja'?'<span style="color:var(--red)" title="Redujo la cantidad de acciones"> ▼</span>':'';
+    return '<span style="display:inline-block;margin:1px 8px 1px 0;white-space:nowrap">'+f.corto+' <b>'+_gfFmt(x.w)+'</b>'+fl+'</span>';};
+  var dondeEsta=function(k){return act.filter(function(f){return idx[f.id][k];}).map(function(f){return {f:f,x:idx[f.id][k]};});};
+  // universo de tickers de los fondos
+  var U={};act.forEach(function(f){Object.keys(idx[f.id]).forEach(function(k){U[k]=1;});});
+  // 1) mis coincidencias
+  var coin=Object.keys(M).filter(function(k){return dondeEsta(k).length;}).sort(function(a,b){return dondeEsta(b).length-dondeEsta(a).length||M[b].w-M[a].w;});
+  var wCoin=coin.reduce(function(s,k){return s+M[k].w;},0);
+  var s1='<div style="padding:.4rem .2rem .6rem;font-size:.8rem">'+(coin.length?'<b>'+coin.length+'</b> de tus <b>'+nM+'</b> acciones/Cedears están en al menos uno de los fondos, y representan el <b>'+_gfFmt(wCoin)+'</b> de tu cartera de acciones.':'Ninguna de tus '+nM+' acciones/Cedears aparece en estos fondos.')+'</div>';
+  if(coin.length)s1+='<div class="tw"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Activo</th><th '+th+'>Mi peso</th><th '+th+'>Fondos que lo tienen (peso en su cartera)</th></tr></thead><tbody>'+coin.map(function(k){
+    return '<tr><td '+td+'><b style="font-family:var(--mono)">'+M[k].tk.join(' / ')+'</b></td><td '+td+'>'+_gfFmt(M[k].w)+'</td><td '+td+'>'+dondeEsta(k).map(function(o){return chip(o.f,o.x);}).join('')+'</td></tr>';}).join('')+'</tbody></table></div>';
+  // 2) en común entre fondos
+  var comun=Object.keys(U).filter(function(k){return dondeEsta(k).length>=2;}).sort(function(a,b){var A=dondeEsta(a),B=dondeEsta(b);return B.length-A.length||B.reduce(function(s,o){return s+o.x.w;},0)-A.reduce(function(s,o){return s+o.x.w;},0);});
+  var s2=comun.length?'<div class="tw"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Activo</th><th '+th+'>Fondos</th><th '+th+'>¿Lo tengo?</th></tr></thead><tbody>'+comun.map(function(k){var d=dondeEsta(k);
+    return '<tr><td '+td+'><b style="font-family:var(--mono)">'+k+'</b> <span class="mu" style="font-size:.68rem">'+String(d[0].x.n||'').slice(0,28)+'</span></td><td '+td+'>'+d.map(function(o){return chip(o.f,o.x);}).join('')+'</td><td '+td+'>'+(M[k]?'<span style="color:var(--accent)">Sí · '+_gfFmt(M[k].w)+'</span>':'<span class="mu">No</span>')+'</td></tr>';}).join('')+'</tbody></table></div>'
+    :'<div style="padding:.6rem .2rem;color:var(--text3);font-size:.76rem">Ninguna acción está en dos o más de los '+act.length+' fondos. Con pocos fondos concentrados es normal: mirá las carteras de cada uno más abajo.</div>';
+  // 3) para mirar: no las tengo
+  var cand=Object.keys(U).filter(function(k){return !M[k];}).map(function(k){var d=dondeEsta(k),sw=d.reduce(function(s,o){return s+o.x.w;},0),rec=d.some(function(o){return o.x.ch==='nueva'||o.x.ch==='sube';});
+    return {k:k,d:d,sc:d.length*10+Math.min(sw,30)+(rec?3:0),ced:_gfCedear(k)};}).sort(function(a,b){return b.sc-a.sc;});
+  var cc=cand.filter(function(c){return c.ced;}).slice(0,15),sinCed=cand.filter(function(c){return !c.ced;}).length;
+  var s3=cc.length?'<div class="tw"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Activo</th><th '+th+'>Fondos que lo tienen</th></tr></thead><tbody>'+cc.map(function(c){
+    return '<tr><td '+td+'><b style="font-family:var(--mono)">'+c.k+'</b> <span class="mu" style="font-size:.68rem">'+String(c.d[0].x.n||'').slice(0,28)+'</span></td><td '+td+'>'+c.d.map(function(o){return chip(o.f,o.x);}).join('')+'</td></tr>';}).join('')+'</tbody></table></div>'
+    :'<div style="padding:.6rem .2rem;color:var(--text3);font-size:.76rem">No hay candidatos con Cedear.</div>';
+  s3+='<div style="padding:.4rem .2rem;font-size:.68rem;color:var(--text3)">Orden: más fondos que lo tienen, más peso y si lo compraron o aumentaron último trimestre. Solo se muestran los que tienen Cedear'+(sinCed?' ('+sinCed+' más no se pueden comprar como Cedear acá)':'')+'. Para evaluar el precio usá "¿Cara o barata?".</div>';
+  // 4) concentración y detalle por fondo
+  var top5=function(a){return a.sort(function(x,y){return y-x;}).slice(0,5).reduce(function(s,v){return s+v;},0);};
+  var conc='<div class="tw"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'></th><th '+th+'>Cartera presentada</th><th '+th+'>Posiciones</th><th '+th+'>Top 5 pesan</th><th '+th+'>Coincido con</th></tr></thead><tbody>'+
+    '<tr><td '+td+'><b>Mi cartera (acciones)</b></td><td '+td+'>hoy</td><td '+td+'>'+nM+'</td><td '+td+'>'+_gfFmt(top5(Object.keys(M).map(function(k){return M[k].w;})))+'</td><td '+td+'>—</td></tr>'+
+    act.map(function(f){var ks=Object.keys(idx[f.id]),co=ks.filter(function(k){return M[k];}).length;return '<tr><td '+td+'><b>'+f.nombre+'</b></td><td '+td+'>al '+_gfFecha(f.periodo)+' <span class="mu" style="font-size:.66rem">(presentado '+_gfFecha(f.presentado)+')</span></td><td '+td+'>'+f.n+'</td><td '+td+'>'+_gfFmt(top5(f.pos.map(function(p){return f.tot>0?p.v/f.tot*100:0;})))+'</td><td '+td+'>'+co+' de tus acciones</td></tr>';}).join('')+'</tbody></table></div>'+
+    (inact.length?'<div style="padding:.4rem .2rem;font-size:.7rem;color:var(--text3)">Sin datos recientes (se excluyen de la comparación): '+inact.map(function(f){return f.corto+' (última cartera al '+_gfFecha(f.periodo)+')';}).join(', ')+'.</div>':'');
+  var det=act.map(function(f){return '<details style="margin:.3rem .2rem"><summary style="cursor:pointer;font-size:.78rem"><b>'+f.corto+'</b> — mayores posiciones</summary><div style="padding:.3rem 0">'+f.pos.slice(0,15).map(function(p){var k=p.t?_gfNorm(p.t):null,w=f.tot>0?p.v/f.tot*100:0;
+    return '<div style="font-size:.74rem;padding:2px 0">'+(k&&M[k]?'<span style="color:var(--accent)">●</span> ':'○ ')+'<b style="font-family:var(--mono)">'+(k||'?')+'</b> <span class="mu">'+String(p.n).slice(0,30)+'</span> · '+_gfFmt(w)+'</div>';}).join('')+'<div class="mu" style="font-size:.66rem;padding-top:3px">● = la tenés</div></div></details>';}).join('');
+  var sec=function(t,b){return '<div class="card" style="margin-bottom:1rem"><div class="card-header"><span class="card-title">'+t+'</span></div>'+b+'</div>';};
+  pg.innerHTML=head(conc)+sec('Mis coincidencias con los fondos',s1)+sec('Lo que tienen en común los fondos',s2)+sec('Para estudiar: lo que tienen los fondos y no tengo',s3)+sec('Carteras de cada fondo','<div>'+det+'</div>');
+}
+function gfInit(){if(document.getElementById('page-grandes'))return;var pp=document.getElementById('page-portafolio'),mb=document.querySelector('.nav-item[onclick*="\'balances\'"]')||document.querySelector('.nav-item[onclick*="\'movimientos\'"]');if(!pp||!mb)return;
+  var pg=document.createElement('div');pg.className='page';pg.id='page-grandes';pp.parentNode.appendChild(pg);
+  var b=document.createElement('button');b.className='nav-item';b.setAttribute('onclick',"showPage('grandes',this)");b.innerHTML='<span>🏛</span>Grandes fondos';mb.parentNode.insertBefore(b,mb.nextSibling);}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(gfInit,50);});else setTimeout(gfInit,300);
 
 // ─── ☁️ Indicador de guardado (punto al lado de la hora) ───────────────────────────────────────────
 // Verde: todo guardado en la nube. Amarillo: guardando, cambios que quedaron solo en este navegador, u otra pestaña
