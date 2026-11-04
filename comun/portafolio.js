@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2851, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2852, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2852 | 2026-11-04 | Importar: después de confirmar, ofrece guardar como objetivo/máximo las ventas de los últimos 30 días que superan el objetivo actual (sin tildar de entrada).',
   'v2850 | 2026-11-04 | Venta rápida: tilde para guardar el precio de venta como objetivo; reemplaza el anterior solo si es más alto en USD.',
   'v2851 | 2026-11-04 | Objetivos: tilde "es el máximo que llegó" al vender y punto verde 🟢 en el Portafolio cuando el precio llega al objetivo.',
   'v2849 | 2026-11-03 | Nueva pantalla Estrategia: cartera ideal con tesis, destino del aporte, concentración y correlación, calidad de entradas, compras de directivos; calidad del negocio en la valuación; "¿qué te haría vender?" en el diario.',
@@ -1618,9 +1619,36 @@ function biConfirmarImport(){
     +divResult.added+' dividendo(s)/cupón(es) puesto(s) en "Pendientes de revisión" (solapa Dividendos)'
     +(divResult.dup?', '+divResult.dup+' ya existían y se omitieron':'')+'.';
 
+  try{biObjetivosOfrecer(nuevosMov);}catch(e){console.warn('biObjetivosOfrecer',e);}
   document.getElementById('bi-preview').innerHTML='';
   document.getElementById('bi-tickers-wrap').style.display='none';
   _biParsed=null;
+}
+// Después de importar: si alguna venta de los últimos 30 días superaría el objetivo guardado de su ticker (en USD), se ofrece
+// guardarla como objetivo/máximo. Una fila por ticker (la de precio más alto). Sin tildar de entrada: no cambia nada solo.
+var _biObjC=[];
+function biObjetivosOfrecer(movs){
+  var statusEl=document.getElementById('bi-status');if(!statusEl)return;var box=document.getElementById('bi-obj');
+  if(!box){box=document.createElement('div');box.id='bi-obj';statusEl.parentNode.insertBefore(box,statusEl.nextSibling);}
+  var hoy=Date.now(),best={};
+  (movs||[]).forEach(function(m){if(m.tipo!=='venta'||!(m.precioUSD>0))return;var iso=_phIso(m.fecha);if(!iso)return;var edad=(hoy-new Date(iso+'T12:00:00').getTime())/864e5;if(edad>30||edad<-1)return;
+    var s=getSector(m.ticker),usd=Math.round(((s==='bonos'||s==='on')?m.precioUSD*100:m.precioUSD)*100)/100,ant=TARGET_TABLE[m.ticker];
+    if(ant!=null&&!(usd>ant))return;if(!best[m.ticker]||usd>best[m.ticker].usd)best[m.ticker]={tk:m.ticker,usd:usd,f:m.fecha,ant:ant};});
+  _biObjC=Object.keys(best).map(function(k){return best[k];});
+  if(!_biObjC.length){box.innerHTML='';return;}
+  box.innerHTML='<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--border2);border-radius:8px;font-size:.76rem"><div style="font-weight:700;margin-bottom:6px">🎯 ¿Guardar alguna venta como objetivo/máximo?</div>'+
+    '<div style="color:var(--text3);font-size:.68rem;margin-bottom:6px">Ventas de los últimos 30 días que superan tu objetivo actual en USD (o ese activo no tiene). Solo se guardan las que tildes.</div>'+
+    _biObjC.map(function(c,i){return '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:4px 0;border-top:1px solid var(--border)"><b style="font-family:var(--mono);min-width:64px">'+c.tk+'</b><span>vendida a <b>USD '+c.usd.toLocaleString('es-AR')+'</b> el '+c.f+' <span style="color:var(--text3)">('+(c.ant!=null?'objetivo actual USD '+c.ant.toLocaleString('es-AR'):'sin objetivo')+')</span></span>'+
+      '<label style="cursor:pointer"><input type="checkbox" id="bio-o-'+i+'"> 🎯 objetivo</label><label style="cursor:pointer"><input type="checkbox" id="bio-m-'+i+'"> ⬆ máximo</label></div>';}).join('')+
+    '<div style="margin-top:8px;display:flex;gap:8px"><button class="btn btn-a btn-sm" onclick="biObjetivosAplicar()">Aplicar</button><button class="btn btn-sm" onclick="biObjetivosOmitir()">Omitir</button></div></div>';
+}
+function biObjetivosOmitir(){var b=document.getElementById('bi-obj');if(b)b.innerHTML='';_biObjC=[];}
+function biObjetivosAplicar(){
+  var n=0,tocoMeta=false;
+  _biObjC.forEach(function(c,i){var o=document.getElementById('bio-o-'+i),m=document.getElementById('bio-m-'+i),esMax=!!(m&&m.checked);if(!((o&&o.checked)||esMax))return;
+    var ant=TARGET_TABLE[c.tk];if(ant!=null&&!(c.usd>ant))return;TARGET_TABLE[c.tk]=c.usd;TARGET_META[c.tk]={max:esMax?1:0,f:c.f};n++;tocoMeta=true;});
+  if(n){try{localStorage.setItem((PFX+'targets'),JSON.stringify(TARGET_TABLE));}catch(e){}sbSetConfig('targets',TARGET_TABLE);if(tocoMeta)_tgtMetaGuardar();try{renderTargets();renderPortfolio();}catch(e){}}
+  var b=document.getElementById('bi-obj');if(b)b.innerHTML='<div style="margin-top:8px;font-size:.75rem;color:var(--accent)">'+(n?'✓ '+n+' objetivo(s) actualizado(s).':'No se cambió ningún objetivo.')+'</div>';_biObjC=[];
 }
 
 function recategorizarTicker(){
