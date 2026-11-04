@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2845, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2846, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2846 | 2026-11-03 | Balances: prueba hacia atrás (solo lectura) para ver si una señal previa al balance anticipó caídas en tus activos durante el último año.',
   'v2845 | 2026-10-31 | Grandes fondos: se saca Scion (Burry, dado de baja) y se suman Baupost (Klarman) y Duquesne (Druckenmiller). Hay que volver a subir la función fondos13f.',
   'v2844 | 2026-10-31 | Balances: la sorpresa de los últimos 4 balances usa la mediana, para que estimados cercanos a cero no la distorsionen.',
   'v2843 | 2026-10-31 | Nueva pantalla "Grandes fondos": carteras 13F de Berkshire, Pershing Square, Himalaya y Scion comparadas con la tuya (requiere subir la función fondos13f).',
@@ -12674,6 +12675,58 @@ async function balCargar(forzar){
   })();
   try{return await BAL.cargando;}finally{BAL.cargando=null;}
 }
+// ─── 🧪 Prueba hacia atrás del "semáforo pre-balance" (solo lectura: no cambia nada de la app) ───────────────
+// Para los balances del último año de tus activos: mide cuánto subió la acción el mes previo, si estaba cerca de su máximo y qué hizo
+// el precio después. Compara los casos con "señal roja" contra el resto, para ver si vender una parte hubiera ayudado.
+var BT={d:null,corriendo:false,msg:''};
+var BT_COSTO=0.018; // costo de salir y volver (comisiones + puntas + CCL), de ejemplo
+function _btMed(a){if(!a.length)return null;var s=a.slice().sort(function(x,y){return x-y;}),n=s.length;return n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2;}
+function _btProm(a){return a.length?a.reduce(function(s,v){return s+v;},0)/a.length:null;}
+async function btCorrer(){
+  if(BT.corriendo)return;BT.corriendo=true;BT.d=null;var tk=_balTickers(),syms=Object.keys(tk),ev=[],hasta=new Date();hasta.setDate(hasta.getDate()-3);var desde=new Date();desde.setDate(desde.getDate()-365);
+  for(var i=0;i<syms.length;i++){
+    BT.msg='Buscando balances pasados… '+(i+1)+'/'+syms.length+' ('+syms[i]+')';btRender();
+    try{var r=await fetchWithTimeout(FBASE+'/calendar/earnings?from='+_balIso(desde)+'&to='+_balIso(hasta)+'&symbol='+encodeURIComponent(syms[i])+'&token='+FKEY,{},12000);
+      if(r.ok){var j=await r.json(),sy=syms[i];(j&&j.earningsCalendar||[]).forEach(function(x){if(x&&x.date&&x.epsActual!=null)ev.push({s:sy,tk:tk[sy][0],f:x.date,h:x.hour||'',ea:x.epsActual,ee:x.epsEstimate});});}
+      else if(r.status===429){BT.msg='Finnhub pidió esperar (límite de pedidos). Probá de nuevo en un minuto.';BT.corriendo=false;btRender();return;}
+    }catch(e){}
+    await new Promise(function(res){setTimeout(res,1100);});
+  }
+  BT.msg='Calculando reacciones de '+ev.length+' balances…';btRender();
+  var out=[];
+  for(var k=0;k<ev.length;k++){var e=ev[k];
+    try{var o=await _phSerie(e.tk,getSector(e.tk)),ser=(o&&o.ser)||[],amc=e.h==='amc',ri=-1;
+      for(var q=0;q<ser.length;q++){if(amc?ser[q][0]>e.f:ser[q][0]>=e.f){ri=q;break;}}
+      if(ri<25)continue;var base=ser[ri-1][1],gap=(new Date(ser[ri][0])-new Date(ser[ri-1][0]))/86400000;if(!(base>0)||gap>5)continue;
+      var lim=new Date(ser[ri-1][0]);lim.setDate(lim.getDate()-30);var iso=_balIso(lim),p30=null;
+      for(var z=ri-1;z>=0;z--){if(ser[z][0]<=iso){p30=ser[z][1];break;}}
+      var mx=0;for(var y=Math.max(0,ri-1-252);y<ri;y++){if(ser[y][1]>mx)mx=ser[y][1];}
+      if(!p30||!(mx>0))continue;
+      out.push({s:e.s,f:e.f,beat:e.ee!=null?e.ea>=e.ee:null,run:base/p30-1,cerca:base>=mx*0.95,d1:ser[ri][1]/base-1,d3:ser[ri+2]?ser[ri+2][1]/base-1:null});
+    }catch(x){}
+  }
+  BT.d=out;BT.msg=out.length?'':'No hubo balances con datos suficientes para medir.';BT.corriendo=false;btRender();
+}
+function btResumen(L){var d1=L.map(function(x){return x.d1;}),d3=L.filter(function(x){return x.d3!=null;}).map(function(x){return x.d3;});
+  return {n:L.length,m1:_btProm(d1),md1:_btMed(d1),neg:L.length?L.filter(function(x){return x.d1<0;}).length/L.length:null,m3:_btProm(d3)};}
+function btRender(){
+  var el=document.getElementById('bt-panel');if(!el)return;var pc=function(v){return v==null?'—':(v>=0?'+':'')+(v*100).toLocaleString('es-AR',{maximumFractionDigits:1})+'%';};
+  var h='<div style="padding:.2rem .2rem .6rem;font-size:.72rem;color:var(--text3)">Revisa los balances del último año de tus activos y mide si una "señal roja" (subió 15% o más el mes previo y estaba a menos de 5% de su máximo de 52 semanas) anticipó una caída. Solo lectura: no cambia nada. Tarda 1 a 2 minutos.</div>'+
+    '<button class="btn btn-sm" onclick="btCorrer()"'+(BT.corriendo?' disabled':'')+'>Probar hacia atrás</button> '+(BT.msg?'<span style="font-size:.74rem;color:var(--amber)">'+BT.msg+'</span>':'');
+  if(BT.d&&BT.d.length){
+    var all=BT.d,roj=all.filter(function(x){return x.run>=0.15&&x.cerca;}),res=all.filter(function(x){return !(x.run>=0.15&&x.cerca);}),sub=all.filter(function(x){return x.run>=0.15;}),
+      A=btResumen(all),R=btResumen(roj),S=btResumen(res),U=btResumen(sub);
+    var th='style="text-align:left;padding:6px 8px;font-size:.62rem;color:var(--text3);font-weight:600;border-bottom:1px solid var(--border)"',td='style="padding:7px 8px;border-bottom:1px solid var(--border);font-size:.76rem"';
+    var fila=function(n,r){return '<tr><td '+td+'><b>'+n+'</b></td><td '+td+'>'+r.n+'</td><td '+td+'>'+pc(r.m1)+'</td><td '+td+'>'+pc(r.md1)+'</td><td '+td+'>'+(r.neg==null?'—':Math.round(r.neg*100)+'%')+'</td><td '+td+'>'+pc(r.m3)+'</td></tr>';};
+    h+='<div class="tw" style="margin-top:.6rem"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Grupo</th><th '+th+'>Balances</th><th '+th+'>Reacción 1d (prom.)</th><th '+th+'>Reacción 1d (mediana)</th><th '+th+'>Cayeron</th><th '+th+'>Reacción 3d (prom.)</th></tr></thead><tbody>'+
+      fila('Todos',A)+fila('Señal roja (subió ≥15% y cerca del máximo)',R)+fila('Solo "subió ≥15%"',U)+fila('Sin señal roja',S)+'</tbody></table></div>';
+    var ef=R.m1==null?null:(-0.3*R.m1-0.3*BT_COSTO);
+    h+='<div style="padding:.6rem .2rem;font-size:.78rem;line-height:1.5">'+(R.n<8?'<b style="color:var(--amber)">Hay solo '+R.n+' casos con señal roja: es muy poco para concluir nada.</b> ':'')+
+      (ef==null?'':'Si en cada caso con señal roja hubieras vendido el 30% antes del balance, el resultado promedio sobre la posición habría sido <b style="color:'+(ef>=0?'var(--accent)':'var(--red)')+'">'+pc(ef)+'</b> (descontando un costo de salir y volver de '+(BT_COSTO*100).toLocaleString('es-AR',{maximumFractionDigits:1})+'% sobre esa parte). Positivo = vender hubiera ayudado; negativo = mantener era mejor.')+
+      '</div><div style="font-size:.68rem;color:var(--text3);padding:0 .2rem .4rem">Límites: un solo año; incluye solo los activos que tenés hoy (los que ya vendiste no están); el precio en USD usa el dólar de cada día y tiene algo de ruido; las reacciones se miden contra el cierre previo al balance; no incluye P/E histórico ni tu ganancia de ese momento.</div>';
+  }
+  el.innerHTML=h;
+}
 // Eventos de la cartera: [{t:[tickers BYMA], s, f, h, ...}]
 function balDeCartera(){
   if(!BAL.d)return [];var tk=_balTickers();
@@ -12749,7 +12802,9 @@ function balRender(){
     '<span class="mu" style="font-size:.66rem;margin-left:auto">Actualizado '+act.toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+'</span><button class="btn btn-sm" onclick="balActualizar(this)">⟳</button></div>'+
     '<div style="padding:0 .2rem .4rem;font-size:.7rem;color:var(--text3)">Próximos 60 días de los activos que tenés en cartera. Los que presentan en '+BAL_DIAS_AVISO+' días o menos llevan 📊 en el Portafolio. Solo empresas que cotizan en EE.UU. (los Cedears y las argentinas con ADR); los ETF y los bonos no presentan balance.</div>'+
     tabla(prox,false)+'</div>'+
-    '<div class="card"><div class="card-header"><span class="card-title">Ya presentaron (últimos 7 días)</span></div>'+tabla(rec,true)+'</div>';
+    '<div class="card"><div class="card-header"><span class="card-title">Ya presentaron (últimos 7 días)</span></div>'+tabla(rec,true)+'</div>'+
+    '<div class="card" style="margin-top:1rem"><div class="card-header"><span class="card-title">🧪 Prueba hacia atrás: ¿una señal roja anticipó caídas?</span></div><div id="bt-panel" style="padding:.4rem .6rem .8rem"></div></div>';
+  btRender();
   balExtra(L);
 }
 async function balActualizar(b){if(b)b.textContent='…';await balCargar(true);balRender();try{nvRender();}catch(e){}}
