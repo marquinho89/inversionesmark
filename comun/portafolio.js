@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2847, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2848, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2848 | 2026-11-03 | Balances: contexto pre-balance de tus activos (señales, ganancia en juego, peso y costo de salir), informativo y sin sugerencias.',
   'v2847 | 2026-11-03 | Cobros de bonos: tarjeta "Rendimiento de tus bonos" con TIR de hoy, TNA y la tasa de tu promedio de compra.',
   'v2846 | 2026-11-03 | Balances: prueba hacia atrás (solo lectura) para ver si una señal previa al balance anticipó caídas en tus activos durante el último año.',
   'v2845 | 2026-10-31 | Grandes fondos: se saca Scion (Burry, dado de baja) y se suman Baupost (Klarman) y Duquesne (Druckenmiller). Hay que volver a subir la función fondos13f.',
@@ -12832,6 +12833,72 @@ async function balExtra(L){
   }finally{BAL.busy=false;}
   var p3=document.getElementById('page-balances');if(p3&&p3.classList.contains('active'))balRender();
 }
+// ─── 🎯 Contexto pre-balance: qué señales hay antes de que presenten tus activos (informativo, sin sugerencias) ─────
+// Por cada activo tuyo que presenta en los próximos 30 días: cuánto subió el último mes, qué tan cerca está de su máximo, si está
+// cara o barata contra su propia historia, cómo reaccionó en sus últimos balances, y cuánta ganancia y peso tiene en tu cartera.
+// El punto de color cuenta señales de atención (subió 15% o más el mes previo, está cara, o cayó en 3 de sus últimos 4 balances).
+// No dice qué hacer: es contexto para decidir. La prueba hacia atrás (abajo) muestra si estas señales sirvieron en el pasado.
+var PRE={d:{},busy:false};BAL.pas=(function(){try{return JSON.parse(localStorage.getItem('bal_pas_v1')||'{}')||{};}catch(e){return {};}})();
+var PRE_COSTO=0.018; // costo estimado de salir y volver: comisiones + puntas + CCL
+function _preVal(p){
+  var s=getSector(p.ticker),q=(typeof quotes!=='undefined')?quotes[p.ticker]:null,hoy=CCL_HOY||1,mep=MEP_HOY||hoy,ratio=RATIOS_TABLE[p.ticker]||1,v;
+  if(q&&q.price){var bo=(s==='bonos'||s==='on');
+    v=isBonoUSDDirecto(p.ticker)?q.price*p.qty/100:bo?(q.price/mep)*p.qty/100:s==='fci'?(q.price/mep)*p.qty:s==='argentina'?(q.price/hoy)*p.qty:BRL_TICKERS.has(p.ticker)?(q.price/hoy)*p.qty:q.fromByma?(q.price/hoy)*p.qty:(q.price/ratio)*p.qty;}
+  else v=p.costUSDpuro||0;return v||0;
+}
+async function _prePas(sym){
+  var c=BAL.pas[sym];if(c&&Date.now()-c.ts<3*86400000)return c.e;
+  var h=new Date();h.setDate(h.getDate()-3);var d=new Date();d.setDate(d.getDate()-420);
+  try{var r=await fetchWithTimeout(FBASE+'/calendar/earnings?from='+_balIso(d)+'&to='+_balIso(h)+'&symbol='+encodeURIComponent(sym)+'&token='+FKEY,{},12000);
+    if(r.ok){var j=await r.json(),e=(j&&j.earningsCalendar||[]).filter(function(x){return x&&x.date&&x.epsActual!=null;}).map(function(x){return {f:x.date,h:x.hour||'',ea:x.epsActual,ee:x.epsEstimate};}).sort(function(a,b){return a.f<b.f?1:-1;}).slice(0,4);
+      BAL.pas[sym]={ts:Date.now(),e:e};try{localStorage.setItem('bal_pas_v1',JSON.stringify(BAL.pas));}catch(x){}return e;}}catch(x){}
+  return null;
+}
+async function preCargar(L){
+  if(PRE.busy)return;PRE.busy=true;
+  try{
+    var prox=L.filter(function(x){var dd=_balDias(x.f);return dd>=0&&dd<=30;}),pos={},tot=0;
+    getPositions().filter(function(p){return p.qty>0.000001;}).forEach(function(p){var v=_preVal(p);tot+=v;pos[p.ticker]={v:v,c:p.costUSDpuro||0};});
+    for(var i=0;i<prox.length;i++){var x=prox[i],k=x.s+'|'+x.f;if(PRE.d[k]&&PRE.d[k].ok)continue;var tk=x.t[0],s=getSector(tk),o={ok:true,tk:tk,x:x};
+      try{var sr=await _phSerie(tk,s),ser=(sr&&sr.ser)||[];
+        if(ser.length>30){var last=ser[ser.length-1],lim=new Date(last[0]);lim.setDate(lim.getDate()-30);var iso=_balIso(lim),p30=null;for(var z=ser.length-1;z>=0;z--){if(ser[z][0]<=iso){p30=ser[z][1];break;}}
+          if(p30>0)o.run=last[1]/p30-1;var mx=0;for(var y=Math.max(0,ser.length-252);y<ser.length;y++){if(ser[y][1]>mx)mx=ser[y][1];}if(mx>0)o.dmax=last[1]/mx-1;}}catch(e){}
+      try{o.val=_valDe(tk);}catch(e){}
+      var ps=await _prePas(x.s);
+      if(ps){o.hist=[];for(var q=0;q<ps.length;q++){var rr=await balReac({t:x.t,s:x.s,f:ps[q].f,h:ps[q].h});if(rr)o.hist.push({d1:rr.d1,beat:ps[q].ee!=null?ps[q].ea>=ps[q].ee:null});}}
+      var pp=pos[tk];if(pp){o.v=pp.v;o.g=pp.v-pp.c;o.gp=pp.c>0?(pp.v/pp.c-1):null;o.w=tot>0?pp.v/tot:null;}
+      PRE.d[k]=o;
+      var pg=document.getElementById('page-balances');if(pg&&pg.classList.contains('active'))preRender(L);
+      await new Promise(function(res){setTimeout(res,700);});
+    }
+  }finally{PRE.busy=false;}
+  preRender(L);
+}
+function preRender(L){
+  var el=document.getElementById('pre-panel');if(!el)return;L=L||balDeCartera();
+  var pc=function(v,d){return v==null||!isFinite(v)?'—':(v>=0?'+':'−')+Math.abs(v*100).toLocaleString('es-AR',{maximumFractionDigits:d==null?0:d})+'%';};
+  var usd=function(v){return v==null||!isFinite(v)?'—':(v<0?'−':'')+'USD '+Math.abs(Math.round(v)).toLocaleString('es-AR');};
+  var th='style="text-align:left;padding:6px 8px;font-size:.62rem;color:var(--text3);font-weight:600;border-bottom:1px solid var(--border)"',td='style="padding:7px 8px;border-bottom:1px solid var(--border);font-size:.76rem"';
+  var chip=function(t,c,tip){return '<span title="'+(tip||'')+'" style="display:inline-block;margin:1px 4px 1px 0;padding:1px 7px;border-radius:5px;font-size:.66rem;border:1px solid '+c+';color:'+c+'">'+t+'</span>';};
+  // Clima: lo que pasó con tus activos que ya presentaron (últimos 7 días)
+  var rec=L.filter(function(x){return _balDias(x.f)<0&&x.ea!=null&&x.ee!=null&&BAL.r[x.s+'|'+x.f];}),sup=rec.filter(function(x){return x.ea>=x.ee&&BAL.r[x.s+'|'+x.f].d1!=null;});
+  var clima='';
+  if(sup.length){var m=sup.reduce(function(s,x){return s+BAL.r[x.s+'|'+x.f].d1;},0)/sup.length,cae=sup.filter(function(x){return BAL.r[x.s+'|'+x.f].d1<0;}).length;
+    clima='<div style="padding:.2rem .2rem .7rem;font-size:.8rem"><b>Clima de la temporada (tus activos):</b> de los <b>'+sup.length+'</b> que presentaron en los últimos 7 días y superaron el EPS estimado, <b>'+cae+'</b> cayeron al día siguiente; el promedio fue <b style="color:'+(m>=0?'var(--accent)':'var(--red)')+'">'+pc(m,1)+'</b>. <span class="mu" style="font-size:.68rem">Muestra chica: es una impresión, no una medición.</span></div>';}
+  var prox=L.filter(function(x){var dd=_balDias(x.f);return dd>=0&&dd<=30;});
+  var rows=prox.map(function(x){var o=PRE.d[x.s+'|'+x.f],dd=_balDias(x.f);
+    if(!o)return '<tr><td '+td+'></td><td '+td+'><b style="font-family:var(--mono)">'+x.t.join(' / ')+'</b></td><td '+td+'>'+_balFecha(x.f)+' <span class="mu">(en '+dd+' d)</span></td><td '+td+' colspan="5"><span class="mu">Calculando…</span></td></tr>';
+    var n=0,ch=[];
+    if(o.run!=null){var al=o.run>=0.15;if(al)n++;ch.push(chip('subió '+pc(o.run)+' en 30 días',al?'var(--amber)':'var(--text3)','Variación del precio en los 30 días previos'));}
+    if(o.dmax!=null)ch.push(chip(o.dmax>-0.05?'cerca del máximo ('+pc(o.dmax)+')':'a '+pc(o.dmax)+' del máximo','var(--text3)','Distancia al máximo de 52 semanas. Es informativo: no se cuenta como alerta.'));
+    if(o.val&&o.val.est&&o.val.est!=='sin'){var cara=o.val.est==='cara';if(cara)n++;ch.push(chip(o.val.est+(o.val.dif!=null?' '+pc(o.val.dif/100):''),cara?'var(--amber)':o.val.est==='barata'?'var(--accent)':'var(--text3)','Contra su propia mediana de 5 años (P/E y P/FCF)'));}
+    if(o.hist&&o.hist.length>=3){var cay=o.hist.filter(function(h){return h.d1<0;}).length,al2=cay>=3&&cay>=o.hist.length-1;if(al2)n++;ch.push(chip('cayó en '+cay+'/'+o.hist.length+' balances',al2?'var(--amber)':'var(--text3)','Reacción del precio al día siguiente en sus últimos balances'));}
+    var col=n>=2?'var(--red)':n===1?'var(--amber)':'var(--accent)';
+    return '<tr><td '+td+'><span title="'+n+' señal(es) de atención" style="display:inline-block;width:11px;height:11px;border-radius:50%;background:'+col+'"></span></td><td '+td+'><b style="font-family:var(--mono)">'+x.t.join(' / ')+'</b></td><td '+td+'>'+_balFecha(x.f)+' <span class="mu">(en '+dd+' d)</span></td><td '+td+'>'+(ch.join('')||'<span class="mu">sin datos</span>')+'</td>'+
+      '<td '+td+'>'+(o.g==null?'—':'<span style="color:'+(o.g>=0?'var(--accent)':'var(--red)')+'">'+usd(o.g)+'</span> <span class="mu" style="font-size:.68rem">'+pc(o.gp)+'</span>')+'</td><td '+td+'>'+(o.w==null?'—':(o.w*100).toLocaleString('es-AR',{maximumFractionDigits:1})+'%')+'</td><td '+td+'>'+(o.v?usd(o.v*PRE_COSTO):'—')+'</td></tr>';}).join('');
+  el.innerHTML=clima+(rows?'<div class="tw"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'></th><th '+th+'>Activo</th><th '+th+'>Presenta</th><th '+th+'>Señales</th><th '+th+'>Ganancia en juego</th><th '+th+'>Peso</th><th '+th+' title="Costo estimado de vender y volver a comprar toda la posición (comisiones, puntas y CCL), calculado al '+(PRE_COSTO*100).toLocaleString('es-AR',{maximumFractionDigits:1})+'%">Costo de salir y volver</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<div style="padding:.6rem .2rem;color:var(--text3);font-size:.76rem">Ningún activo tuyo presenta balance en los próximos 30 días.</div>')+
+    '<div style="font-size:.68rem;color:var(--text3);padding:.5rem .2rem;line-height:1.5">Contexto informativo, no una recomendación. El punto cuenta señales de atención (subió 15% o más el último mes, está cara contra su historia, o cayó en 3 de sus últimos 4 balances): verde 0, amarillo 1, rojo 2 o más. Que esté cerca del máximo no se cuenta, porque históricamente no anticipa caídas. Que una señal aparezca no significa que el precio vaya a caer: la prueba hacia atrás de abajo mide si estas señales sirvieron en el último año. El costo de salir es una estimación del 1,8% de la posición.</div>';
+}
 function balRender(){
   var pg=document.getElementById('page-balances');if(!pg)return;
   if(!BAL.d){pg.innerHTML='<div class="card"><div style="padding:1rem;color:var(--text3);font-size:.8rem">Cargando calendario de balances…</div></div>';balCargar().then(function(d){if(d)balRender();else pg.innerHTML='<div class="card"><div style="padding:1rem;color:var(--text3);font-size:.8rem">No se pudo bajar el calendario. Probá más tarde.</div></div>';});return;}
@@ -12848,13 +12915,15 @@ function balRender(){
   var tabla=function(rows,pasado){return rows.length?'<div class="tw"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Fecha</th><th '+th+'>Cuándo</th><th '+th+'>Activo</th><th '+th+'>Horario</th><th '+th+'>Trimestre</th>'+
     (pasado?'<th '+th+'>Resultado (EPS)</th><th '+th+'>Ingresos USD</th><th '+th+' title="Cuántos de los últimos 4 balances superaron el EPS estimado y la sorpresa promedio">Últimos 4 balances</th><th '+th+' title="Variación del precio desde el cierre previo al balance hasta la rueda siguiente (1 día) y 3 ruedas después. Precio en USD calculado con el dólar de cada día.">Reacción 1d / 3d</th>':'<th '+th+'>EPS estimado</th><th '+th+'>Ingresos est. USD</th><th '+th+' title="Cuántos de los últimos 4 balances superaron el EPS estimado y la sorpresa promedio">Últimos 4 balances</th>')+'</tr></thead><tbody>'+rows.map(function(x){return fila(x,pasado);}).join('')+'</tbody></table></div>':'<div style="padding:.6rem 0;color:var(--text3);font-size:.76rem">'+(pasado?'Nada en los últimos 7 días.':'Ningún activo de tu cartera presenta balance en los próximos 60 días.')+'</div>';};
   var act=new Date(BAL.d.ts);
-  pg.innerHTML='<div class="card" style="margin-bottom:1rem"><div class="card-header" style="display:flex;align-items:center;gap:10px"><span class="card-title">📊 Calendario de balances</span>'+
+  pg.innerHTML='<div class="card" style="margin-bottom:1rem"><div class="card-header"><span class="card-title">🎯 Contexto pre-balance de tus activos</span></div><div id="pre-panel" style="padding:.4rem .6rem .6rem"></div></div>'+
+    '<div class="card" style="margin-bottom:1rem"><div class="card-header" style="display:flex;align-items:center;gap:10px"><span class="card-title">📊 Calendario de balances</span>'+
     '<span class="mu" style="font-size:.66rem;margin-left:auto">Actualizado '+act.toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+'</span><button class="btn btn-sm" onclick="balActualizar(this)">⟳</button></div>'+
     '<div style="padding:0 .2rem .4rem;font-size:.7rem;color:var(--text3)">Próximos 60 días de los activos que tenés en cartera. Los que presentan en '+BAL_DIAS_AVISO+' días o menos llevan 📊 en el Portafolio. Solo empresas que cotizan en EE.UU. (los Cedears y las argentinas con ADR); los ETF y los bonos no presentan balance.</div>'+
     tabla(prox,false)+'</div>'+
     '<div class="card"><div class="card-header"><span class="card-title">Ya presentaron (últimos 7 días)</span></div>'+tabla(rec,true)+'</div>'+
     '<div class="card" style="margin-top:1rem"><div class="card-header"><span class="card-title">🧪 Prueba hacia atrás: ¿una señal roja anticipó caídas?</span></div><div id="bt-panel" style="padding:.4rem .6rem .8rem"></div></div>';
   btRender();
+  preRender(L);preCargar(L);
   balExtra(L);
 }
 async function balActualizar(b){if(b)b.textContent='…';await balCargar(true);balRender();try{nvRender();}catch(e){}}
