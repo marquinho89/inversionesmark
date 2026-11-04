@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2848, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2849, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2849 | 2026-11-03 | Nueva pantalla Estrategia: cartera ideal con tesis, destino del aporte, concentración y correlación, calidad de entradas, compras de directivos; calidad del negocio en la valuación; "¿qué te haría vender?" en el diario.',
   'v2848 | 2026-11-03 | Balances: contexto pre-balance de tus activos (señales, ganancia en juego, peso y costo de salir), informativo y sin sugerencias.',
   'v2847 | 2026-11-03 | Cobros de bonos: tarjeta "Rendimiento de tus bonos" con TIR de hoy, TNA y la tasa de tu promedio de compra.',
   'v2846 | 2026-11-03 | Balances: prueba hacia atrás (solo lectura) para ver si una señal previa al balance anticipó caídas en tus activos durante el último año.',
@@ -1742,6 +1743,7 @@ function showPage(id,btn){
   if(id==='arbitraje') arbRender();
   if(id==='rotaciones') rotRender();
   if(id==='balances') balRender();
+  if(id==='estrategia') estRender();
   if(id==='grandes') gfRender();
   if(id==='diario') diaRender();
   if(id==='noticias') nwsLoad(false);
@@ -2682,7 +2684,7 @@ function vbuyConfirmar(){
     id:Date.now(), fecha:fecha, tipo:'compra', mercado:mkt, ticker:ticker, qty:qty,
     precioARS:precioARS, ccl:cclVal, ratio:ratio, precioUSD:precioUSD,
     comision:0, comisionPct:0, notas:'Cargado desde módulo rápido (Portafolio)',
-    porque:_diaPorque('vbuy'),
+    porque:_diaPorque('vbuy'),venderSi:_diaPorque('vbuy-vender'),
     finish:finishEl&&finishEl.checked||false, cartera:(typeof CARTERA_ACTIVA!=='undefined'?CARTERA_ACTIVA:undefined)
   });
   saveAndRender();
@@ -11769,13 +11771,14 @@ function valAyuda(){
     '<div style="font-size:.7rem;color:var(--text3);line-height:1.5;margin-top:8px;border-top:1px solid var(--border);padding-top:8px">Cuando un indicador contradice a otro, no es un error: suele indicar que las ganancias contables y el flujo de caja cuentan historias distintas. Datos de Finnhub, se actualizan una vez por día. Las acciones sin datos (ETF, empresas sin ganancias) muestran "—".</div></div>';}
 async function valCargar(){if(_valRun||!_valOn())return;_valRun=true;
   try{var seen={},L=NV_ROWS.filter(function(o){if(!_valOk(o)||seen[o.t])return false;seen[o.t]=1;return true;}).map(function(o){return o.t;});
-    var P=L.filter(function(t){return !VAL[t]||!VAL[t].v||Date.now()-VAL[t].ts>20*3600e3;});_valProg=P.length?[0,P.length]:null;
+    try{estTickers().forEach(function(t){if(L.indexOf(t)<0)L.push(t);});}catch(e){}
+    var P=L.filter(function(t){return !VAL[t]||!VAL[t].v||VAL[t].q!==1||Date.now()-VAL[t].ts>20*3600e3;});_valProg=P.length?[0,P.length]:null;
     for(var i=0;i<P.length;i++){var t=P[i],s=getFinnhubTicker(t);
       try{var m=await (await fetchWithTimeout(FBASE+'/stock/metric?symbol='+encodeURIComponent(s)+'&metric=all&token='+FKEY,{},10000)).json();
         var q=await (await fetchWithTimeout(FBASE+'/quote?symbol='+encodeURIComponent(s)+'&token='+FKEY,{},10000)).json();
         var M=(m&&m.metric)||{},ser=((m&&m.series&&m.series.annual&&m.series.annual.pe)||[]).slice(0,5).map(function(x){return x.v;});
         var serF=((m&&m.series&&m.series.annual&&m.series.annual.pfcf)||[]).slice(0,5).map(function(x){return x.v;});
-        VAL[t]={v:2,ts:Date.now(),s:s,fpe:M.forwardPE||null,pfcf:M.pfcfShareTTM||null,medf:_valMed(serF),g5:M.epsGrowth5Y||null,pe:M.peTTM||M.peBasicExclExtraTTM||null,med:_valMed(ser),hi:M['52WeekHigh']||null,lo:M['52WeekLow']||null,px:(q&&q.c>0)?q.c:null,dy:M.currentDividendYieldTTM||null};
+        VAL[t]={v:2,ts:Date.now(),s:s,fpe:M.forwardPE||null,pfcf:M.pfcfShareTTM||null,medf:_valMed(serF),g5:M.epsGrowth5Y||null,pe:M.peTTM||M.peBasicExclExtraTTM||null,med:_valMed(ser),hi:M['52WeekHigh']||null,lo:M['52WeekLow']||null,px:(q&&q.c>0)?q.c:null,dy:M.currentDividendYieldTTM||null,q:1,roe:(M.roeTTM!=null?M.roeTTM:null),om:(M.operatingMarginTTM!=null?M.operatingMarginTTM:null),nm:(M.netProfitMarginTTM!=null?M.netProfitMarginTTM:null),de:(M['totalDebt/totalEquityQuarterly']!=null?M['totalDebt/totalEquityQuarterly']:null)};
       }catch(e){VAL[t]={v:2,ts:Date.now(),s:s,px:null};}
       _valProg=[i+1,P.length];if(i%4===3){try{localStorage.setItem('val_v1',JSON.stringify(VAL));}catch(e){}nvVal();}
       await new Promise(function(r){setTimeout(r,2500);});}
@@ -13022,6 +13025,142 @@ function gfInit(){if(document.getElementById('page-grandes'))return;var pp=docum
   var b=document.createElement('button');b.className='nav-item';b.setAttribute('onclick',"showPage('grandes',this)");b.innerHTML='<span>🏛</span>Grandes fondos';mb.parentNode.insertBefore(b,mb.nextSibling);}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(gfInit,50);});else setTimeout(gfInit,300);
 
+// ─── 🧭 Estrategia: cartera ideal, lista de seguimiento, aporte, riesgo, calidad de entradas e insiders ───────────────
+// Todo es informativo: ordena la decisión, no la toma. Los datos de la cartera ideal se guardan en config → "estrategia" (por perfil).
+var EST={d:null,cargado:false,msg:'',riesgo:null,ent:null,ins:null,aporte:'',busy:''};
+function estTickers(){try{return (EST.d&&EST.d.items||[]).map(function(i){return i.tk;});}catch(e){return [];}}
+async function estCargar(){
+  var d=null;try{d=await sbGetConfig('estrategia');}catch(e){}
+  EST.d=(d&&typeof d==='object')?d:{items:[]};if(!Array.isArray(EST.d.items))EST.d.items=[];if(!(EST.d.limMax>0))EST.d.limMax=10;if(!(EST.d.limRubro>0))EST.d.limRubro=35;EST.cargado=true;
+}
+async function estGuardar(){try{var ok=await sbSetConfig('estrategia',EST.d);if(!ok)EST.msg='No se pudo guardar en la nube. Probá de nuevo.';}catch(e){EST.msg='No se pudo guardar: '+(e&&e.message||e);}}
+function estPos(){
+  var out=[],tot=0;
+  getPositions().filter(function(p){return p.qty>0.000001;}).forEach(function(p){var s=getSector(p.ticker);if(s==='bonos'||s==='on'||s==='fci')return;var v=_preVal(p);if(!(v>0))return;out.push({tk:p.ticker,v:v,c:p.costUSDpuro||0,s:s});tot+=v;});
+  out.forEach(function(o){o.w=tot>0?o.v/tot*100:0;});out.sort(function(a,b){return b.v-a.v;});return {L:out,tot:tot};
+}
+function _estRubro(tk){var m=(typeof RATIOS_META!=='undefined')&&(RATIOS_META[tk]||RATIOS_META[getFinnhubTicker(tk)]);return (m&&m.rubro)||'Sin clasificar';}
+// Calidad del negocio: rentabilidad sobre capital, margen operativo y deuda sobre capital (datos de Finnhub guardados con la valuación)
+function _estCal(tk){
+  var v=VAL[tk];if(!v||v.q!==1)return null;var fin=/financ|banc|seguro/i.test(_estRubro(tk)),t=[],ok=0,n=0;
+  if(v.roe!=null){n++;if(v.roe>=12)ok++;t.push('Rentabilidad sobre capital '+v.roe.toFixed(1)+'%');}
+  if(v.om!=null){n++;if(v.om>=10)ok++;t.push('Margen operativo '+v.om.toFixed(1)+'%');}
+  if(!fin&&v.de!=null){n++;if(v.de<=1.5)ok++;t.push('Deuda/capital '+v.de.toFixed(2));}
+  if(!n)return null;return {est:ok===n?'buena':ok>=n/2?'media':'frágil',tip:t.join(' · ')+' (umbrales: 12% · 10% · 1,5)'};
+}
+function _estCalPill(tk){var c=_estCal(tk);if(!c)return '<span class="mu">—</span>';var col=c.est==='buena'?'var(--accent)':c.est==='media'?'var(--amber)':'var(--red)';
+  return '<span title="'+c.tip+'" style="padding:1px 7px;border-radius:5px;font-size:.66rem;border:1px solid '+col+';color:'+col+'">calidad '+c.est+'</span>';}
+function _estEsc(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
+async function estAgregar(){
+  var tk=(document.getElementById('est-tk').value||'').trim().toUpperCase(),ob=parseFloat(document.getElementById('est-ob').value),nota=(document.getElementById('est-nota').value||'').trim();
+  if(!tk){EST.msg='Escribí el ticker.';estRender();return;}if(EST.d.items.some(function(i){return i.tk===tk;})){EST.msg=tk+' ya está en la lista.';estRender();return;}
+  EST.d.items.push({tk:tk,obj:ob>0?ob:0,nota:nota});EST.msg='';await estGuardar();estRender();try{valCargar();}catch(e){}
+}
+async function estQuitar(i){EST.d.items.splice(i,1);await estGuardar();estRender();}
+async function estSet(i,k,v){var it=EST.d.items[i];if(!it)return;if(k==='obj'){v=parseFloat(v);it.obj=v>0?v:0;}else it[k]=String(v||'').trim();await estGuardar();estRender();}
+async function estLim(k,v){v=parseFloat(v);if(!(v>0))return;EST.d[k]=v;await estGuardar();estRender();}
+function estReparto(monto){
+  var P=estPos(),map={};P.L.forEach(function(o){map[o.tk]=o;});var base=P.tot+monto,gaps=[],sg=0;
+  EST.d.items.forEach(function(it){if(!(it.obj>0))return;var cur=map[it.tk]?map[it.tk].v:0,g=Math.max(0,base*it.obj/100-cur);if(g>0){gaps.push({tk:it.tk,g:g});sg+=g;}});
+  if(!(sg>0))return [];var f=Math.min(1,monto/sg);return gaps.map(function(x){return {tk:x.tk,usd:x.g*f};}).sort(function(a,b){return b.usd-a.usd;});
+}
+// ── Correlación entre tus mayores posiciones (retornos diarios del último año, en USD) ──
+async function estCorr(){
+  if(EST.busy)return;EST.busy='corr';EST.msg='Calculando correlaciones…';estRender();
+  try{var P=estPos().L.slice(0,12),R={};
+    for(var i=0;i<P.length;i++){var o=await _phSerie(P[i].tk,P[i].s),ser=((o&&o.ser)||[]).slice(-251),r={};for(var j=1;j<ser.length;j++){if(ser[j-1][1]>0)r[ser[j][0]]=ser[j][1]/ser[j-1][1]-1;}if(Object.keys(r).length>60)R[P[i].tk]=r;}
+    var ks=Object.keys(R),pairs=[];
+    for(var a=0;a<ks.length;a++)for(var b=a+1;b<ks.length;b++){var xs=[],ys=[];Object.keys(R[ks[a]]).forEach(function(d){if(R[ks[b]][d]!=null){xs.push(R[ks[a]][d]);ys.push(R[ks[b]][d]);}});
+      if(xs.length<60)continue;var mx=xs.reduce(function(s,v){return s+v;},0)/xs.length,my=ys.reduce(function(s,v){return s+v;},0)/ys.length,sxy=0,sxx=0,syy=0;
+      for(var k=0;k<xs.length;k++){sxy+=(xs[k]-mx)*(ys[k]-my);sxx+=(xs[k]-mx)*(xs[k]-mx);syy+=(ys[k]-my)*(ys[k]-my);}
+      if(sxx>0&&syy>0)pairs.push({a:ks[a],b:ks[b],r:sxy/Math.sqrt(sxx*syy)});}
+    pairs.sort(function(x,y){return y.r-x.r;});EST.riesgo={pairs:pairs,n:ks.length,prom:pairs.length?pairs.reduce(function(s,p){return s+p.r;},0)/pairs.length:null};EST.msg='';
+  }catch(e){EST.msg='No se pudo calcular: '+(e&&e.message||e);}
+  EST.busy='';estRender();
+}
+// ── Calidad de tus entradas: dónde del rango anual compraste y cómo te fue contra el S&P 500 desde entonces ──
+async function estEntradas(){
+  if(EST.busy)return;EST.busy='ent';EST.msg='Revisando tus compras…';estRender();
+  try{var spy=await _phSerie('SPY','nyse'),sser=(spy&&spy.ser)||[],lastS=sser.length?sser[sser.length-1][1]:null,out=[];
+    var compras=_diaMovs().filter(function(m){return m.tipo==='compra'&&!(getSector(m.ticker)==='bonos'||getSector(m.ticker)==='on'||getSector(m.ticker)==='fci');}).sort(function(a,b){return (_phIso(b.fecha)||'').localeCompare(_phIso(a.fecha)||'');}).slice(0,40);
+    var px=function(ser,iso){var idx=-1;for(var i=ser.length-1;i>=0;i--){if(ser[i][0]<=iso){idx=i;break;}}return idx;};
+    for(var i=0;i<compras.length;i++){var m=compras[i],iso=_phIso(m.fecha);if(!iso)continue;var o=await _phSerie(m.ticker,getSector(m.ticker)),ser=(o&&o.ser)||[];if(ser.length<30)continue;
+      var ix=px(ser,iso);if(ix<20)continue;var win=ser.slice(Math.max(0,ix-251),ix+1).map(function(x){return x[1];}),mn=Math.min.apply(null,win),mx=Math.max.apply(null,win),p=ser[ix][1],pos=mx>mn?(p-mn)/(mx-mn):null;
+      var ret=ser[ser.length-1][1]/p-1,is=px(sser,iso),rs=(is>=0&&lastS)?lastS/sser[is][1]-1:null;
+      out.push({tk:m.ticker,f:m.fecha,pos:pos,ret:ret,rs:rs,al:rs==null?null:ret-rs});}
+    var pp=out.filter(function(x){return x.pos!=null;}),al=out.filter(function(x){return x.al!=null;});
+    EST.ent={L:out,n:out.length,pos:pp.length?pp.reduce(function(s,x){return s+x.pos;},0)/pp.length:null,altas:pp.length?pp.filter(function(x){return x.pos>=0.8;}).length/pp.length:null,al:al.length?al.reduce(function(s,x){return s+x.al;},0)/al.length:null,ganan:al.length?al.filter(function(x){return x.al>0;}).length/al.length:null};EST.msg='';
+  }catch(e){EST.msg='No se pudo calcular: '+(e&&e.message||e);}
+  EST.busy='';estRender();
+}
+// ── Compras de directivos (insiders): formulario 4 de la SEC vía Finnhub, últimos 90 días ──
+async function estInsiders(){
+  if(EST.busy)return;EST.busy='ins';var P=estPos().L.slice(0,10).map(function(o){return o.tk;}),T=[];estTickers().concat(P).forEach(function(t){if(T.indexOf(t)<0&&getSector(t)!=='bonos'&&getSector(t)!=='on'&&getSector(t)!=='fci'&&!/^(SPY|DIA|QQQ|IVV|VOO|EWZ|IBIT|ETHA|XL[A-Z]{1,2}|IWM|EEM|GLD|SLV)$/.test(t))T.push(t);});
+  var out=[],hasta=_balIso(new Date()),d=new Date();d.setDate(d.getDate()-90);var desde=_balIso(d);
+  for(var i=0;i<T.length;i++){EST.msg='Consultando directivos… '+(i+1)+'/'+T.length+' ('+T[i]+')';estRender();var s=(getSector(T[i])==='argentina'?BYMA_TO_NYSE[T[i]]:getFinnhubTicker(T[i]))||T[i];
+    try{var r=await fetchWithTimeout(FBASE+'/stock/insider-transactions?symbol='+encodeURIComponent(s)+'&from='+desde+'&to='+hasta+'&token='+FKEY,{},12000);
+      if(r.status===429){EST.msg='Finnhub pidió esperar (límite de pedidos). Probá de nuevo en un minuto.';break;}
+      if(r.ok){var j=await r.json(),L=(j&&j.data||[]).filter(function(x){return x&&(x.transactionCode==='P'||x.transactionCode==='S')&&x.change;}),buy=0,sell=0,nb=0,names={};
+        L.forEach(function(x){var v=Math.abs(x.change)*(x.transactionPrice||0);if(x.transactionCode==='P'){buy+=v;nb++;names[x.name]=1;}else sell+=v;});
+        out.push({tk:T[i],buy:buy,sell:sell,nb:nb,quien:Object.keys(names).length});}}catch(e){}
+    await new Promise(function(res){setTimeout(res,1100);});}
+  EST.ins=out;if(EST.msg.indexOf('límite')<0)EST.msg='';EST.busy='';estRender();
+}
+function estRender(){
+  var pg=document.getElementById('page-estrategia');if(!pg)return;
+  if(!EST.cargado){pg.innerHTML='<div class="card"><div style="padding:1rem;color:var(--text3);font-size:.8rem">Cargando…</div></div>';estCargar().then(function(){estRender();try{valCargar();}catch(e){}});return;}
+  var P=estPos(),map={};P.L.forEach(function(o){map[o.tk]=o;});
+  var pc=function(v,d){return v==null||!isFinite(v)?'—':v.toLocaleString('es-AR',{minimumFractionDigits:d==null?1:d,maximumFractionDigits:d==null?1:d})+'%';};
+  var usd=function(v){return v==null||!isFinite(v)?'—':(v<0?'−':'')+'USD '+Math.abs(Math.round(v)).toLocaleString('es-AR');};
+  var th='style="text-align:left;padding:6px 8px;font-size:.62rem;color:var(--text3);font-weight:600;border-bottom:1px solid var(--border)"',td='style="padding:7px 8px;border-bottom:1px solid var(--border);font-size:.76rem"';
+  var inp='style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:4px 7px;font-size:.76rem"';
+  var card=function(t,sub,body){return '<div class="card" style="margin-bottom:1rem"><div class="card-header"><span class="card-title">'+t+'</span></div><div style="padding:.2rem .8rem .8rem">'+(sub?'<div style="font-size:.7rem;color:var(--text3);padding:.2rem 0 .5rem;line-height:1.5">'+sub+'</div>':'')+body+'</div></div>';};
+  var btn=function(t,f,key){return '<button class="btn btn-sm" onclick="'+f+'"'+(EST.busy?' disabled':'')+'>'+(EST.busy===key?'…':t)+'</button>';};
+  // 1) Cartera ideal
+  var sumObj=EST.d.items.reduce(function(s,i){return s+(i.obj||0);},0);
+  var filas=EST.d.items.map(function(it,i){var o=map[it.tk],w=o?o.w:0,dif=it.obj>0?w-it.obj:null,v=null;try{v=_valPill(_valDe(it.tk));}catch(e){v='—';}
+    return '<tr><td '+td+'><b style="font-family:var(--mono)">'+_estEsc(it.tk)+'</b>'+(o?'':' <span class="mu" style="font-size:.64rem">(no la tenés)</span>')+'</td><td '+td+'>'+pc(w)+'</td>'+
+      '<td '+td+'><input type="number" min="0" max="100" step="0.5" value="'+(it.obj||'')+'" onchange="estSet('+i+',\'obj\',this.value)" '+inp+' style="width:64px"> %</td>'+
+      '<td '+td+'>'+(dif==null?'—':'<span style="color:'+(dif<-0.5?'var(--amber)':dif>0.5?'var(--text3)':'var(--accent)')+'">'+(dif>=0?'+':'−')+Math.abs(dif).toFixed(1).replace('.',',')+' pp</span>')+'</td>'+
+      '<td '+td+'>'+v+'</td><td '+td+'>'+_estCalPill(it.tk)+'</td>'+
+      '<td '+td+'><input type="text" value="'+_estEsc(it.nota)+'" maxlength="200" placeholder="Tesis: por qué la querés" onchange="estSet('+i+',\'nota\',this.value)" '+inp+' style="width:100%;min-width:160px"></td>'+
+      '<td '+td+'><button class="btn btn-sm" onclick="estQuitar('+i+')" title="Quitar de la lista">✕</button></td></tr>';}).join('');
+  var sinDef=P.L.filter(function(o){return !EST.d.items.some(function(i){return i.tk===o.tk;});}).slice(0,8);
+  var s1=(filas?'<div class="tw"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Activo</th><th '+th+'>Peso hoy</th><th '+th+'>Objetivo</th><th '+th+'>Diferencia</th><th '+th+'>Valuación</th><th '+th+'>Calidad</th><th '+th+'>Tesis</th><th '+th+'></th></tr></thead><tbody>'+filas+'</tbody></table></div>':'<div class="mu" style="padding:.4rem 0;font-size:.76rem">Todavía no definiste activos. Sumá los que tenés y los que querés vigilar, con el peso que te gustaría que tengan.</div>')+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:.7rem"><input id="est-tk" placeholder="Ticker (ej.: MSFT)" '+inp+' style="width:120px"><input id="est-ob" type="number" min="0" max="100" step="0.5" placeholder="Objetivo %" '+inp+' style="width:100px"><input id="est-nota" placeholder="Tesis: por qué (opcional)" maxlength="200" '+inp+' style="flex:1;min-width:180px"><button class="btn btn-a btn-sm" onclick="estAgregar()">+ Agregar</button></div>'+
+    (sumObj>0?'<div style="font-size:.72rem;margin-top:.5rem;color:'+(sumObj>100.01?'var(--red)':'var(--text3)')+'">Objetivos sumados: <b>'+pc(sumObj)+'</b> de tus acciones y Cedears'+(sumObj>100.01?' (pasan el 100%)':sumObj<99.99?' (el resto queda libre)':'')+'.</div>':'')+
+    (sinDef.length?'<div style="font-size:.7rem;color:var(--text3);margin-top:.4rem">Tenés sin objetivo: '+sinDef.map(function(o){return o.tk+' '+pc(o.w);}).join(' · ')+'.</div>':'');
+  // 2) Dónde va el próximo aporte
+  var mon=parseFloat(EST.aporte)||0,rep=mon>0?estReparto(mon):[];
+  var s2='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:.76rem">Aporte a invertir en acciones y Cedears: USD</span><input type="number" min="0" step="50" value="'+(EST.aporte||'')+'" onchange="EST.aporte=this.value;estRender()" '+inp+' style="width:110px"></div>'+
+    (mon>0?(rep.length?'<div class="tw" style="margin-top:.6rem"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Activo</th><th '+th+'>Reparto sugerido</th><th '+th+'>Valuación</th><th '+th+'>Calidad</th></tr></thead><tbody>'+rep.map(function(x){var v='—';try{v=_valPill(_valDe(x.tk));}catch(e){}return '<tr><td '+td+'><b style="font-family:var(--mono)">'+x.tk+'</b></td><td '+td+'>'+usd(x.usd)+'</td><td '+td+'>'+v+'</td><td '+td+'>'+_estCalPill(x.tk)+'</td></tr>';}).join('')+'</tbody></table></div><div style="font-size:.68rem;color:var(--text3);margin-top:.4rem">Reparte según cuánto le falta a cada activo para llegar a su objetivo, contando el aporte como parte de la cartera. Es un orden de prioridades: si alguno figura cara, podés esperar o dirigir ese monto a otro.</div>':'<div class="mu" style="margin-top:.6rem;font-size:.76rem">Con los objetivos actuales no hay activos por debajo de su peso: no hace falta dirigir el aporte a ninguno en particular.</div>'):'');
+  // 3) Riesgo
+  var altos=P.L.filter(function(o){return o.w>EST.d.limMax;}),rub={};P.L.forEach(function(o){var r=_estRubro(o.tk);rub[r]=(rub[r]||0)+o.w;});
+  var rubAltos=Object.keys(rub).filter(function(r){return rub[r]>EST.d.limRubro&&r!=='Sin clasificar';}).sort(function(a,b){return rub[b]-rub[a];});
+  var C=EST.riesgo,fuertes=C?C.pairs.filter(function(p){return p.r>=0.8;}).slice(0,8):[];
+  var s3='<div style="font-size:.78rem;line-height:1.6">'+
+    (altos.length?'<span style="color:var(--amber)">Pasan tu límite de <b>'+EST.d.limMax+'%</b> por activo:</span> '+altos.map(function(o){return '<b>'+o.tk+'</b> '+pc(o.w);}).join(' · '):'Ningún activo pasa tu límite de <b>'+EST.d.limMax+'%</b> por activo.')+'<br>'+
+    (rubAltos.length?'<span style="color:var(--amber)">Pasan tu límite de <b>'+EST.d.limRubro+'%</b> por rubro:</span> '+rubAltos.map(function(r){return '<b>'+_estEsc(r)+'</b> '+pc(rub[r]);}).join(' · '):'Ningún rubro pasa tu límite de <b>'+EST.d.limRubro+'%</b>.')+'</div>'+
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:.6rem;font-size:.72rem;color:var(--text3)">Límites: por activo <input type="number" min="1" max="100" value="'+EST.d.limMax+'" onchange="estLim(\'limMax\',this.value)" '+inp+' style="width:58px">% · por rubro <input type="number" min="1" max="100" value="'+EST.d.limRubro+'" onchange="estLim(\'limRubro\',this.value)" '+inp+' style="width:58px">% '+btn('Calcular correlación','estCorr()','corr')+'</div>'+
+    (C?'<div style="margin-top:.7rem;font-size:.78rem">'+(fuertes.length?'<b>Se mueven casi igual</b> (correlación de 0,8 o más): '+fuertes.map(function(p){return p.a+' y '+p.b+' ('+p.r.toFixed(2).replace('.',',')+')';}).join(' · ')+'. Tenerlas juntas diversifica menos de lo que parece.':'Entre tus '+C.n+' mayores posiciones no hay pares con correlación de 0,8 o más.')+(C.prom!=null?' <span class="mu">Correlación promedio: '+C.prom.toFixed(2).replace('.',',')+'.</span>':'')+'</div><div style="font-size:.66rem;color:var(--text3);margin-top:.3rem">Calculada con los retornos diarios del último año en USD (el dólar de cada día suma algo de correlación a todas). Solo las '+C.n+' mayores posiciones.</div>':'');
+  // 4) Entradas
+  var E=EST.ent,s4=btn('Analizar mis compras','estEntradas()','ent')+(E?'<div style="margin-top:.7rem;font-size:.8rem;line-height:1.6">En tus últimas <b>'+E.n+'</b> compras de acciones y Cedears: compraste, en promedio, en el <b>'+pc(E.pos==null?null:E.pos*100,0)+'</b> de su rango del último año (0% es el mínimo, 100% el máximo), y <b>'+pc(E.altas==null?null:E.altas*100,0)+'</b> de las veces estaba en el 20% más alto. Contra comprar el S&P 500 el mismo día, la diferencia promedio desde entonces es <b style="color:'+(E.al>=0?'var(--accent)':'var(--red)')+'">'+(E.al==null?'—':(E.al>=0?'+':'−')+Math.abs(E.al*100).toFixed(1).replace('.',',')+' pp')+'</b>, y le ganaste en <b>'+pc(E.ganan==null?null:E.ganan*100,0)+'</b> de los casos.</div>'+
+    '<div class="tw" style="margin-top:.6rem"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Compra</th><th '+th+'>Dónde del rango</th><th '+th+'>Desde entonces</th><th '+th+'>Contra el S&P 500</th></tr></thead><tbody>'+E.L.slice(0,12).map(function(x){return '<tr><td '+td+'><b style="font-family:var(--mono)">'+x.tk+'</b> <span class="mu">'+x.f+'</span></td><td '+td+'>'+(x.pos==null?'—':pc(x.pos*100,0))+'</td><td '+td+'><span style="color:'+(x.ret>=0?'var(--accent)':'var(--red)')+'">'+pc(x.ret*100)+'</span></td><td '+td+'>'+(x.al==null?'—':'<span style="color:'+(x.al>=0?'var(--accent)':'var(--red)')+'">'+(x.al>=0?'+':'−')+Math.abs(x.al*100).toFixed(1).replace('.',',')+' pp</span>')+'</td></tr>';}).join('')+'</tbody></table></div><div style="font-size:.66rem;color:var(--text3);margin-top:.3rem"></div><div style="font-size:.66rem;color:var(--text3);margin-top:.3rem">Precios en USD con el dólar de cada día. Mide cómo entraste, no si la acción era buena: una compra reciente casi no tiene historia para comparar.</div>':'');
+  // 5) Insiders
+  var I=EST.ins,s5=btn('Consultar directivos','estInsiders()','ins')+(I?(I.length?'<div class="tw" style="margin-top:.6rem"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Activo</th><th '+th+'>Compras (90 días)</th><th '+th+'>Ventas (90 días)</th><th '+th+'>Directivos que compraron</th></tr></thead><tbody>'+I.sort(function(a,b){return b.buy-a.buy;}).map(function(x){return '<tr><td '+td+'><b style="font-family:var(--mono)">'+x.tk+'</b></td><td '+td+'>'+(x.buy>0?'<span style="color:var(--accent)">'+usd(x.buy)+'</span>':'—')+'</td><td '+td+'>'+(x.sell>0?usd(x.sell):'—')+'</td><td '+td+'>'+(x.quien>=2?'<b style="color:var(--accent)">'+x.quien+' (varios)</b>':x.quien||'—')+'</td></tr>';}).join('')+'</tbody></table></div>':'<div class="mu" style="margin-top:.5rem;font-size:.76rem">Sin datos.</div>')+'<div style="font-size:.66rem;color:var(--text3);margin-top:.4rem">Solo compras y ventas en el mercado abierto (códigos P y S del formulario 4). Las ventas de directivos suelen ser planificadas o por impuestos y dicen poco; las compras con su plata, sobre todo de varios a la vez, dicen más. Es una señal de apoyo, no una razón para comprar.</div>':'');
+  pg.innerHTML=(EST.msg?'<div class="ibox" style="margin-bottom:1rem;font-size:.74rem;color:var(--amber)">'+EST.msg+'</div>':'')+
+    card('🎯 Cartera ideal y lista de seguimiento','Los activos que querés tener o vigilar, con el peso objetivo y por qué. Valuación y calidad salen de los datos de Finnhub que ya usa la app.',s1)+
+    card('💵 ¿Dónde va el próximo aporte?','Cuánto poner en cada activo para acercarte a tu cartera ideal.',s2)+
+    card('🛡 Concentración y correlación','Cuánto pesa cada activo y rubro, y qué posiciones se mueven juntas.',s3)+
+    card('📍 Calidad de tus entradas','Si tendés a comprar caro dentro de su rango y cómo te fue contra el índice.',s4)+
+    card('🧑‍💼 Compras de directivos (insiders)','Lo que compraron y vendieron con su plata los directivos de tus activos y de tu lista.',s5)+
+    '<div style="font-size:.68rem;color:var(--text3);padding:0 .3rem 1rem">Información de apoyo, no una recomendación de inversión. Ninguna señal garantiza un resultado.</div>';
+}
+function estInit(){if(document.getElementById('page-estrategia'))return;var pp=document.getElementById('page-portafolio'),mb=document.querySelector('.nav-item[onclick*="\'balances\'"]')||document.querySelector('.nav-item[onclick*="\'movimientos\'"]');if(!pp||!mb)return;
+  var pg=document.createElement('div');pg.className='page';pg.id='page-estrategia';pp.parentNode.appendChild(pg);
+  var b=document.createElement('button');b.className='nav-item';b.setAttribute('onclick',"showPage('estrategia',this)");b.innerHTML='<span>🧭</span>Estrategia';mb.parentNode.insertBefore(b,mb.nextSibling);}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(estInit,80);});else setTimeout(estInit,400);
+
 // ─── ☁️ Indicador de guardado (punto al lado de la hora) ───────────────────────────────────────────
 // Verde: todo guardado en la nube. Amarillo: guardando, cambios que quedaron solo en este navegador, u otra pestaña
 // del mismo portafolio abierta (la que quede vieja ya no pisa, pero conviene trabajar en una sola). Rojo: falló un
@@ -13085,7 +13224,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 // A los 6 meses la operación pasa a "Para revisar": se muestra lo que pensabas y cómo salió (precio de hoy contra el de
 // la operación, con los cobros del medio). Al marcarla revisada se puede dejar una lección (m.porqueRev).
 var DIA_DIAS=180;
-function _diaPorque(k){var e=document.getElementById(k+'-porque');if(!e)return undefined;var v=(e.value||'').trim();e.value='';return v||undefined;}
+function _diaPorque(k){var e=document.getElementById(k.indexOf('-')>0?k:k+'-porque');if(!e)return undefined;var v=(e.value||'').trim();e.value='';return v||undefined;}
 function _diaInputs(){
   [['vbuy','vbuyConfirmar()','Ej.: barata contra su historia, quiero más tecnología'],['vsell','vsellConfirmar()','Ej.: llegó al precio objetivo, necesito liquidez']].forEach(function(x){
     if(document.getElementById(x[0]+'-porque'))return;
@@ -13093,6 +13232,9 @@ function _diaInputs(){
     var row=document.createElement('div');row.style.cssText='margin-top:8px;display:flex;align-items:center;gap:8px';
     row.innerHTML='<span style="font-size:.7rem;color:var(--text3);white-space:nowrap">📓 ¿Por qué?</span><input type="text" id="'+x[0]+'-porque" maxlength="300" placeholder="'+x[2]+' (opcional)" style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--rsm,6px);color:var(--text);padding:6px 8px;font-size:.78rem;font-family:var(--sans)">';
     b.parentNode.parentNode.insertBefore(row,b.parentNode);
+    if(x[0]==='vbuy'&&!document.getElementById('vbuy-vender')){var r2=document.createElement('div');r2.style.cssText='margin-top:6px;display:flex;align-items:center;gap:8px';
+      r2.innerHTML='<span style="font-size:.7rem;color:var(--text3);white-space:nowrap">🚪 ¿Qué te haría vender?</span><input type="text" id="vbuy-vender" maxlength="300" placeholder="Ej.: si pierde margen dos trimestres seguidos (opcional)" style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--rsm,6px);color:var(--text);padding:5px 8px;font-size:.76rem">';
+      row.parentNode.insertBefore(r2,b.parentNode);}
   });
 }
 function _diaMovs(){
@@ -13120,7 +13262,7 @@ function diaRender(){
   var op=function(m){return '<b style="color:'+(m.tipo==='compra'?'var(--accent)':'var(--red)')+'">'+(m.tipo==='compra'?'Compraste':'Vendiste')+'</b> '+(+m.qty).toLocaleString('es-AR')+' <b style="font-family:var(--mono)">'+m.ticker+'</b> <span class="mu">el '+m.fecha+'</span>';};
   var card=function(t,sub,html){return '<div class="card" style="margin-bottom:1rem"><div class="card-header"><span class="card-title">'+t+'</span></div>'+(sub?'<div style="font-size:.7rem;color:var(--text3);margin:-.2rem 0 .5rem">'+sub+'</div>':'')+html+'</div>';};
   var item=function(m,extra){return '<div style="padding:.6rem 0;border-top:1px solid var(--border);font-size:.78rem">'+op(m)+' <span id="diar-'+m.id+'" style="margin-left:6px">…</span>'+
-    '<div style="margin-top:4px;padding:6px 10px;border-left:3px solid var(--border2,#445);color:var(--text2);font-style:italic">“'+_diaEsc(m.porque)+'”</div>'+(extra||'')+'</div>';};
+    '<div style="margin-top:4px;padding:6px 10px;border-left:3px solid var(--border2,#445);color:var(--text2);font-style:italic">“'+_diaEsc(m.porque)+'”</div>'+(m.venderSi?'<div style="margin-top:4px;padding:4px 10px;font-size:.74rem;color:var(--text3)">🚪 Vendería si: '+_diaEsc(m.venderSi)+'</div>':'')+(extra||'')+'</div>';};
   var h='';
   h+=card('📓 Para revisar ('+rev.length+')','Operaciones de hace 6 meses o más: lo que pensabas entonces y cómo salió.',
     rev.length?rev.map(function(m){return item(m,'<div style="margin-top:6px;display:flex;gap:6px;align-items:center"><input type="text" id="dial-'+m.id+'" placeholder="¿Qué aprendiste? (opcional)" style="flex:1;min-width:0"><button class="btn btn-a btn-sm" onclick="diaRevisar(\''+m.id+'\')">✓ Revisada</button></div>');}).join(''):'<div class="mu" style="font-size:.76rem;padding:.4rem 0">Nada para revisar todavía. Cuando una operación con "por qué" cumpla 6 meses, aparece acá.</div>');
