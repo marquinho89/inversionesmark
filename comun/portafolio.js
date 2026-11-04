@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2846, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2847, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2847 | 2026-11-03 | Cobros de bonos: tarjeta "Rendimiento de tus bonos" con TIR de hoy, TNA y la tasa de tu promedio de compra.',
   'v2846 | 2026-11-03 | Balances: prueba hacia atrás (solo lectura) para ver si una señal previa al balance anticipó caídas en tus activos durante el último año.',
   'v2845 | 2026-10-31 | Grandes fondos: se saca Scion (Burry, dado de baja) y se suman Baupost (Klarman) y Duquesne (Druckenmiller). Hay que volver a subir la función fondos13f.',
   'v2844 | 2026-10-31 | Balances: la sorpresa de los últimos 4 balances usa la mediana, para que estimados cercanos a cero no la distorsionen.',
@@ -766,8 +767,57 @@ function renderFlujosMiniResumen(cal){
     bloque('Próximos 30 días',_flujosFmtTotales(t30))+
     bloque('Próximos 90 días',_flujosFmtTotales(t90));
 }
+// ─── 📈 Rendimiento de tus bonos: TIR de hoy, TNA y a qué tasa quedó tu compra ─────────────────────────────
+// TIR de hoy: la que ya calcula la app con el flujo cargado (en los CER, flujos al CER de hoy: es una TIR real, "CER + x%").
+// TNA = tasa nominal anual con capitalización mensual equivalente a esa TIR (TEA): 12 × ((1+TEA)^(1/12) − 1). No aplica a los CER.
+// "Tu compra": TIR de lo que pagaste (cada compra a su fecha, con ventas descontadas por orden de llegada) contra los pagos que quedan.
+function _brEsCER(t){return /^(TX|TZX|DICP|PARP|CUAP|DIP)/.test(t);}
+function _brTna(tea){return tea==null||!isFinite(tea)?null:12*(Math.pow(1+tea,1/12)-1);}
+function _brLotes(tk){
+  var lotes=[];
+  movimientos.filter(function(m){return m&&m.ticker===tk&&(m.tipo==='compra'||m.tipo==='venta')&&m.owner!=='cristian'&&(typeof CARTERA_ACTIVA==='undefined'||(m.cartera||'principal')===CARTERA_ACTIVA);})
+    .sort(function(a,b){var fa=String(a.fecha).split('/'),fb=String(b.fecha).split('/'),da=fa[2]+fa[1].padStart(2,'0')+fa[0].padStart(2,'0'),db=fb[2]+fb[1].padStart(2,'0')+fb[0].padStart(2,'0');return da<db?-1:da>db?1:(a.id||0)-(b.id||0);})
+    .forEach(function(m){
+      if(m.tipo==='compra'){lotes.push({m:m,qty:m.qty});return;}
+      var rest=m.qty;for(var i=0;i<lotes.length&&rest>1e-9;i++){var t=Math.min(lotes[i].qty,rest);lotes[i].qty-=t;rest-=t;}
+    });
+  return lotes.filter(function(l){return l.qty>1e-9;});
+}
+function _brIrr(outs,ins){
+  if(!outs.length||!ins.length)return null;var t0=Math.min.apply(null,outs.map(function(o){return o.d;}));
+  var npv=function(r){var s=0;ins.forEach(function(x){s+=x.m/Math.pow(1+r,(x.d-t0)/31536000000);});outs.forEach(function(x){s-=x.m/Math.pow(1+r,(x.d-t0)/31536000000);});return s;};
+  var lo=-0.9,hi=5,fl=npv(lo),fh=npv(hi);if(!isFinite(fl)||!isFinite(fh)||fl*fh>0)return null;
+  for(var i=0;i<120;i++){var mid=(lo+hi)/2,fm=npv(mid);if(Math.abs(fm)<1e-9)return mid;if(fl*fm<0){hi=mid;fh=fm;}else{lo=mid;fl=fm;}}return (lo+hi)/2;
+}
+function brCompra(tk){
+  var tabla=flujoDe(tk);if(!tabla)return null;var lotes=_brLotes(tk);if(!lotes.length)return null;var outs=[],ins=[],cab=esBonoCable(tk);
+  lotes.forEach(function(l){var m=l.m,p=String(m.fecha).split('/'),d=Date.UTC(+p[2],+p[1]-1,+p[0]),iso=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0'),c;
+    if(tabla.moneda==='USD'){var tc=isBonoUSDDirecto(tk)?1:(cab?(getCCL(m.fecha)||m.ccl||CCL_HOY):(getMEP(m.fecha)||getCCL(m.fecha)||m.ccl||MEP_HOY||CCL_HOY));if(!(tc>0))return;c=(m.precioARS||0)*l.qty/tc;}
+    else c=(m.precioARS||0)*l.qty;
+    if(!(c>0))return;outs.push({d:d,m:c});
+    tabla.flujos.forEach(function(x){if(x.f>iso){var q=x.f.split('-');ins.push({d:Date.UTC(+q[0],+q[1]-1,+q[2]),m:((x.r||0)+(x.a||0))*l.qty/100});}});});
+  var r=_brIrr(outs,ins);return r;
+}
+function brRender(){
+  var pg=document.getElementById('page-flujos');if(!pg)return;var el=document.getElementById('br-panel');
+  if(!el){var ref=document.getElementById('flujo-page-sinflujo');if(!ref)return;el=document.createElement('div');el.id='br-panel';el.className='card';el.style.marginBottom='1rem';ref.parentNode.insertBefore(el,ref.nextSibling);}
+  var pos=getPositions().filter(function(p){return p.qty>0.000001&&(getSector(p.ticker)==='bonos'||getSector(p.ticker)==='on')&&flujoDe(p.ticker);}),sin=getPositions().filter(function(p){var s=getSector(p.ticker);return p.qty>0.000001&&(s==='bonos'||s==='on')&&!flujoDe(p.ticker);}).map(function(p){return p.ticker;});
+  var pc=function(v){return v==null||!isFinite(v)?'—':v.toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';};
+  var th='style="text-align:left;padding:6px 8px;font-size:.62rem;color:var(--text3);font-weight:600;border-bottom:1px solid var(--border)"',td='style="padding:7px 8px;border-bottom:1px solid var(--border);font-size:.76rem"';
+  var rows=pos.map(function(p){var t=p.ticker,cer=_brEsCER(t),h=null;try{var x=calcularTIRReal(t);if(x&&isFinite(x.tir))h=x.tir/100;}catch(e){}
+    var c=null;try{c=brCompra(t);}catch(e){}
+    var tnaH=cer?null:_brTna(h),tnaC=cer?null:_brTna(c);
+    var cerTxt=function(v){return v<0?'CER − '+pc(-v*100):'CER + '+pc(v*100);},hoy=h==null?'—':(cer?cerTxt(h):pc(h*100)),tna=cer?'—':pc(tnaH==null?null:tnaH*100),comp=c==null?'—':(cer?cerTxt(c):'TNA '+pc(tnaC*100)+' <span class="mu" style="font-size:.66rem">(TIR '+pc(c*100)+')</span>');
+    var dif=(h!=null&&c!=null)?(h-c)*100:null,dtxt=dif==null?'':'<span style="font-size:.68rem;color:'+(dif>=0?'var(--accent)':'var(--text3)')+'">'+(dif>=0?'hoy rinde ':'hoy rinde ')+(dif>=0?'+':'')+pc(dif).replace('%',' pp')+(dif>=0?' (más que lo que compraste)':' (menos que lo que compraste)')+'</span>';
+    return '<tr><td '+td+'><b style="font-family:var(--mono)">'+t+'</b>'+(cer?' <span class="mu" style="font-size:.66rem">(CER)</span>':'')+'</td><td '+td+'>'+hoy+'</td><td '+td+'>'+tna+'</td><td '+td+'>'+comp+'</td><td '+td+'>'+dtxt+'</td></tr>';}).join('');
+  el.innerHTML='<div class="card-header"><span class="card-title">📈 Rendimiento de tus bonos</span></div><div class="card-body" style="padding:.6rem 1rem">'+
+    (rows?'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Bono</th><th '+th+'>TIR hoy</th><th '+th+'>TNA hoy</th><th '+th+'>Tu promedio de compra</th><th '+th+'></th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<div style="padding:.6rem 0;color:var(--text3);font-size:.76rem">No hay bonos con flujo cargado.</div>')+
+    '<div style="font-size:.68rem;color:var(--text3);padding:.5rem 0 .2rem;line-height:1.5">TIR = rendimiento anual con interés compuesto (TEA) si lo mantenés hasta el vencimiento, con el precio de hoy. TNA = la misma tasa expresada como nominal anual con capitalización mensual. En los bonos CER la tasa es real: por encima de la inflación, con los flujos al CER de hoy. "Tu promedio de compra" es la tasa de lo que pagaste (cada compra a su fecha, las ventas descontadas por orden de llegada): solo vale si mantenés hasta el vencimiento; si vendés antes, depende del precio de venta. Es una estimación.'+
+    (sin.length?'<br>Sin tabla de pagos cargada (no se pueden calcular acá): '+sin.join(', ')+'.':'')+'</div></div>';
+}
 function renderFlujosPage(){
   var cal=calcularCalendarioCobros();
+  try{brRender();}catch(e){}
   var elRes=document.getElementById('flujo-page-resumen');
   if(elRes){
     var grupo=_flujosProximoGrupo(cal.items);
