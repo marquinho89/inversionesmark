@@ -21,8 +21,10 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2849, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2851, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2850 | 2026-11-04 | Venta rápida: tilde para guardar el precio de venta como objetivo; reemplaza el anterior solo si es más alto en USD.',
+  'v2851 | 2026-11-04 | Objetivos: tilde "es el máximo que llegó" al vender y punto verde 🟢 en el Portafolio cuando el precio llega al objetivo.',
   'v2849 | 2026-11-03 | Nueva pantalla Estrategia: cartera ideal con tesis, destino del aporte, concentración y correlación, calidad de entradas, compras de directivos; calidad del negocio en la valuación; "¿qué te haría vender?" en el diario.',
   'v2848 | 2026-11-03 | Balances: contexto pre-balance de tus activos (señales, ganancia en juego, peso y costo de salir), informativo y sin sugerencias.',
   'v2847 | 2026-11-03 | Cobros de bonos: tarjeta "Rendimiento de tus bonos" con TIR de hoy, TNA y la tasa de tu promedio de compra.',
@@ -2791,6 +2793,11 @@ function vsellClear(){
   vsellPreview();
 }
 
+// Marca de cada objetivo: por defecto es un "objetivo"; si al vender tildás "máximo", el punto verde dice que tocó ese máximo.
+var TARGET_META=(function(){try{return JSON.parse(localStorage.getItem(PFX+'targets_meta')||'{}')||{};}catch(e){return {};}})();
+function _tgtMetaGuardar(){try{localStorage.setItem(PFX+'targets_meta',JSON.stringify(TARGET_META));}catch(e){}try{sbSetConfig('targets_meta',TARGET_META);}catch(e){}}
+setTimeout(function(){try{sbGetConfig('targets_meta').then(function(m){if(m&&typeof m==='object'){Object.keys(m).forEach(function(k){if(!TARGET_META[k])TARGET_META[k]=m[k];});try{localStorage.setItem(PFX+'targets_meta',JSON.stringify(TARGET_META));}catch(e){}}});}catch(e){}},4000);
+function _tgtTip(tk){var m=TARGET_META[tk],v=getTarget(tk);return ((m&&m.max)?'Tocó el máximo que marcaste':'Llegó a tu objetivo')+(v?' (USD '+v.toLocaleString('es-AR')+')':'')+((m&&m.f)?' · fijado en la venta del '+m.f:'')+'. Está en o por encima de ese precio.';}
 function vsellConfirmar(){
   var tickerEl=document.getElementById('vsell-ticker');
   var qtyEl=document.getElementById('vsell-qty');
@@ -2831,9 +2838,18 @@ function vsellConfirmar(){
     porque:_diaPorque('vsell'),
     finish:false, loteMethod:'promedio', cartera:(typeof CARTERA_ACTIVA!=='undefined'?CARTERA_ACTIVA:undefined)
   });
+  // Tilde "guardar como objetivo": reemplaza el objetivo en USD del ticker solo si este precio de venta es más alto
+  var objMsg='',chkObj=document.getElementById('vsell-objetivo'),chkMax=document.getElementById('vsell-max');
+  if(chkObj&&(chkObj.checked||(chkMax&&chkMax.checked))&&precioUSD>0){
+    var nuevoObj=Math.round((esBonoON?precioUSD*100:precioUSD)*100)/100,antObj=TARGET_TABLE[ticker];
+    if(antObj==null||nuevoObj>antObj){TARGET_TABLE[ticker]=nuevoObj;TARGET_META[ticker]={max:(chkMax&&chkMax.checked)?1:0,f:fecha};_tgtMetaGuardar();try{localStorage.setItem((PFX+'targets'),JSON.stringify(TARGET_TABLE));}catch(e){}sbSetConfig('targets',TARGET_TABLE);
+      objMsg=' · Objetivo de '+ticker+(antObj!=null?' subió de USD '+antObj.toLocaleString('es-AR')+' a USD ':' guardado en USD ')+nuevoObj.toLocaleString('es-AR');}
+    else objMsg=' · El objetivo de '+ticker+' (USD '+antObj.toLocaleString('es-AR')+') se mantiene: es más alto que este precio';
+  }
   saveAndRender();
   tcStampearFecha(fecha,(esBonoON||sector==='fci'),cclVal);
-  flash(statusEl,'Venta registrada ✓',false);
+  flash(statusEl,'Venta registrada ✓'+objMsg,false);
+  if(chkObj)chkObj.checked=false;if(chkMax)chkMax.checked=false;
   vsellClear();
   vsellPopulateSelect();
 }
@@ -6942,7 +6958,7 @@ function addTarget(){
   var sel=document.getElementById('targets-status');
   if(!ticker){flash(sel,'Ingresá un ticker',true);return;}
   if(!usd||usd<=0){flash(sel,'Ingresá un precio válido',true);return;}
-  TARGET_TABLE[ticker]=usd;
+  TARGET_TABLE[ticker]=usd;if(TARGET_META[ticker]){delete TARGET_META[ticker];_tgtMetaGuardar();}
   try{localStorage.setItem((PFX+'targets'),JSON.stringify(TARGET_TABLE));}catch(e){}
   sbSetConfig('targets',TARGET_TABLE);
   document.getElementById('tgt-ticker').value='';
@@ -6952,7 +6968,7 @@ function addTarget(){
 }
 
 function deleteTarget(ticker){
-  delete TARGET_TABLE[ticker];
+  delete TARGET_TABLE[ticker];if(TARGET_META[ticker]){delete TARGET_META[ticker];_tgtMetaGuardar();}
   try{localStorage.setItem((PFX+'targets'),JSON.stringify(TARGET_TABLE));}catch(e){}
   sbSetConfig('targets',TARGET_TABLE);
   renderTargets();renderPortfolio();
@@ -11514,7 +11530,7 @@ function nvRender(){
   var sh0='<tr class="sec"><td colspan="8">'+sg[1]+' <span style="color:var(--text3);font-weight:400">· '+X.length+' activos · <span class="port-sensitive">'+_nvM()+_nvN(X.reduce(function(s,o){return s+(_nvInv(o)||0);},0))+'</span></span></td></tr>';it.push({s:sh0,n:sg[1]});
   X.forEach(function(o){var pc=_nvPtCol(o),ab=!!op[o.t];
    var mk=MARKS[o.t],mki=mk?({sell:'🔴',buy:'🟢',watch:'⭐',note:'📝'})[mk.type]||'🏷':'🏷';
-   var r='<tr class="pick'+(ab?' abierta':'')+(mk&&mk.type!=='note'?' marked-'+mk.type:'')+'" onclick="nvAbrir(\''+o.t+'\')" title="Ver más"><td class="l"><span class="car">'+(ab?'▾':'▸')+'</span>'+(o.rv?'<span class="flg" title="'+(_nvPaisN[o.s]||'')+'">'+(_nvFlag[o.s]||'')+'</span>':'')+'<button class="mark-btn'+(mk?' active':'')+'" data-ticker="'+o.t+'" onclick="event.stopPropagation();openMarkPopover(this.dataset.ticker,this)" title="Marcar: Comprar, Vender, Seguir o nota">'+mki+'</button><b class="nvtk" style="font-family:var(--sans);font-size:.84rem"'+(_focoOn()?' onclick="event.stopPropagation();nvFoco(\''+o.t+'\')" title="Ver todo de '+o.t+'"':'')+'>'+o.t+'</b>'+(mk&&mk.note?'<span class="nvnote" data-tip="'+mk.note.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')+'">'+mk.note.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span>':'')+(o.fl?'<span class="nvf" data-tip="'+o.fl.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')+'" onclick="event.stopPropagation();nvTip(this,true)">F</span>':'')+(o.dh?'<span class="nvf nvd" data-tip="Por tu historial, estimamos un dividendo dentro de 30 días" onclick="event.stopPropagation();nvTip(this,true)">D</span>':'')+(typeof balBadge==='function'?balBadge(o.t):'')+(o.fin?'<span class="nvf nvfin" data-tip="A finish" onclick="event.stopPropagation();nvTip(this,true)">🏁</span>':'')+(o.ph?'<button class="ph-btn" data-tk="'+o.t+'" data-ppc="'+o.ppcU+'" onclick="event.stopPropagation();phAbrir(this.dataset.tk,+this.dataset.ppc)" title="Ver historial de precio" style="background:none;border:none;cursor:pointer;padding:0 0 0 5px;font-size:.74rem;opacity:.8">📈</button>':'')+'</td>'+
+   var r='<tr class="pick'+(ab?' abierta':'')+(mk&&mk.type!=='note'?' marked-'+mk.type:'')+'" onclick="nvAbrir(\''+o.t+'\')" title="Ver más"><td class="l"><span class="car">'+(ab?'▾':'▸')+'</span>'+(o.rv?'<span class="flg" title="'+(_nvPaisN[o.s]||'')+'">'+(_nvFlag[o.s]||'')+'</span>':'')+'<button class="mark-btn'+(mk?' active':'')+'" data-ticker="'+o.t+'" onclick="event.stopPropagation();openMarkPopover(this.dataset.ticker,this)" title="Marcar: Comprar, Vender, Seguir o nota">'+mki+'</button><b class="nvtk" style="font-family:var(--sans);font-size:.84rem"'+(_focoOn()?' onclick="event.stopPropagation();nvFoco(\''+o.t+'\')" title="Ver todo de '+o.t+'"':'')+'>'+o.t+'</b>'+(mk&&mk.note?'<span class="nvnote" data-tip="'+mk.note.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')+'">'+mk.note.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span>':'')+(o.fl?'<span class="nvf" data-tip="'+o.fl.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')+'" onclick="event.stopPropagation();nvTip(this,true)">F</span>':'')+(o.dh?'<span class="nvf nvd" data-tip="Por tu historial, estimamos un dividendo dentro de 30 días" onclick="event.stopPropagation();nvTip(this,true)">D</span>':'')+(typeof balBadge==='function'?balBadge(o.t):'')+(o.up!=null&&o.up<=0?'<span class="nvf nvfin" data-tip="'+_tgtTip(o.t).replace(/"/g,'&quot;')+'" onclick="event.stopPropagation();nvTip(this,true)">🟢</span>':'')+(o.fin?'<span class="nvf nvfin" data-tip="A finish" onclick="event.stopPropagation();nvTip(this,true)">🏁</span>':'')+(o.ph?'<button class="ph-btn" data-tk="'+o.t+'" data-ppc="'+o.ppcU+'" onclick="event.stopPropagation();phAbrir(this.dataset.tk,+this.dataset.ppc)" title="Ver historial de precio" style="background:none;border:none;cursor:pointer;padding:0 0 0 5px;font-size:.74rem;opacity:.8">📈</button>':'')+'</td>'+
     '<td><span class="dp" style="'+(o.d==null?'color:var(--text3)':'--dc:'+(o.d>=10?'var(--accent)':o.d>=0?'#eab308':'var(--red)'))+'">'+(o.d==null?'—':(Math.round(o.d)>0?'+':Math.round(o.d)<0?'−':'')+Math.abs(Math.round(o.d))+'%')+'</span></td>'+
     '<td class="up">'+upC(o.up)+'</td>'+
     '<td>'+_nvF(o.px,o)+(o.qh||'')+'</td>'+
@@ -13232,6 +13248,9 @@ function _diaInputs(){
     var row=document.createElement('div');row.style.cssText='margin-top:8px;display:flex;align-items:center;gap:8px';
     row.innerHTML='<span style="font-size:.7rem;color:var(--text3);white-space:nowrap">📓 ¿Por qué?</span><input type="text" id="'+x[0]+'-porque" maxlength="300" placeholder="'+x[2]+' (opcional)" style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--rsm,6px);color:var(--text);padding:6px 8px;font-size:.78rem;font-family:var(--sans)">';
     b.parentNode.parentNode.insertBefore(row,b.parentNode);
+    if(x[0]==='vsell'&&!document.getElementById('vsell-objetivo')){var r3=document.createElement('div');r3.style.cssText='margin-top:6px;display:flex;align-items:center;gap:8px';
+      r3.innerHTML='<label style="font-size:.72rem;color:var(--text3);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="vsell-objetivo"> 🎯 Guardar este precio como objetivo (reemplaza el anterior solo si es más alto en USD)</label><label style="font-size:.72rem;color:var(--text3);display:flex;align-items:center;gap:6px;cursor:pointer;margin-left:10px"><input type="checkbox" id="vsell-max"> ⬆ Es el máximo que llegó</label>';
+      row.parentNode.insertBefore(r3,b.parentNode);}
     if(x[0]==='vbuy'&&!document.getElementById('vbuy-vender')){var r2=document.createElement('div');r2.style.cssText='margin-top:6px;display:flex;align-items:center;gap:8px';
       r2.innerHTML='<span style="font-size:.7rem;color:var(--text3);white-space:nowrap">🚪 ¿Qué te haría vender?</span><input type="text" id="vbuy-vender" maxlength="300" placeholder="Ej.: si pierde margen dos trimestres seguidos (opcional)" style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--rsm,6px);color:var(--text);padding:5px 8px;font-size:.76rem">';
       row.parentNode.insertBefore(r2,b.parentNode);}
