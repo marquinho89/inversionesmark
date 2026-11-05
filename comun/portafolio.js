@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2854, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2855, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2855 | 2026-11-04 | Popup de compra/venta: cartel ⚠️ REVISÁ ANTES DE REGISTRAR con latido y una sacudida al abrir.',
   'v2854 | 2026-11-04 | Aviso de compra/venta ya no muestra cuánto te queda invertido; "A finish" pasa a ⏳ (🏁 queda para objetivo alcanzado).',
   'v2853 | 2026-11-04 | Objetivo alcanzado: el punto verde pasa a ser una bandera a cuadros 🏁 con borde verde.',
   'v2852 | 2026-11-04 | Importar: después de confirmar, ofrece guardar como objetivo/máximo las ventas de los últimos 30 días que superan el objetivo actual (sin tildar de entrada).',
@@ -10613,10 +10614,12 @@ function cartIdentidad(){
 function opModal(o){
   return new Promise(function(res){
     var c=cartColor(),v=o.tipo==='venta',col=v?'var(--red,#ff5252)':'var(--accent,#00e676)';
+    if(!document.getElementById('op-css')){var st=document.createElement('style');st.id='op-css';st.textContent='@keyframes opPulso{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}@keyframes opSacude{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}';document.head.appendChild(st);}
     var ov=document.createElement('div');ov.id='op-dlg';ov.style.cssText='position:fixed;inset:0;z-index:100006;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px';
     var f2=function(x){return (+x).toLocaleString('es-AR',{maximumFractionDigits:2});};
-    ov.innerHTML='<div style="background:var(--surface,#111927);border:2px solid '+c+';border-radius:12px;padding:14px 16px;width:360px;max-width:100%;font-family:Inter,system-ui,sans-serif;color:var(--text,#e8f0ff)">'+
+    ov.innerHTML='<div style="background:var(--surface,#111927);border:2px solid '+c+';border-radius:12px;padding:14px 16px;width:360px;max-width:100%;animation:opSacude .4s ease-out;box-shadow:0 0 0 3px rgba(255,193,7,.35);font-family:Inter,system-ui,sans-serif;color:var(--text,#e8f0ff)">'+
       '<div style="background:'+c+';color:#0b1120;font-weight:800;border-radius:7px;padding:7px 10px;margin:-4px -6px 12px;display:flex;align-items:center;gap:8px;font-size:.88rem">'+_cartAv(26)+(v?'💸 VENTA':'🛒 COMPRA')+' EN LA CARTERA DE '+cartNombre().toUpperCase()+'</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;background:rgba(255,193,7,.14);border:1px solid #ffc107;color:#ffc107;border-radius:7px;padding:6px 10px;margin:0 0 10px;font-weight:800;font-size:.8rem;letter-spacing:.02em"><span style="font-size:1.25rem;animation:opPulso 1s ease-in-out infinite">⚠️</span>REVISÁ ANTES DE REGISTRAR</div>'+
       '<div style="font-size:1rem">'+(v?'Vender':'Comprar')+' <b>'+f2(o.qty)+' '+o.ticker+'</b> a $'+f2(o.precio)+(o.unidad?' <span style="font-size:.75rem;color:var(--text3)">'+o.unidad+'</span>':'')+'</div>'+
       '<div style="font-family:var(--mono);font-size:.7rem;color:var(--text2,#7a9cc5);line-height:1.7;margin-top:6px">'+(o.total?'Total $'+f2(o.total)+' · ':'')+o.fecha+(o.mkt?' · '+o.mkt:'')+(o.extra?'<br>'+o.extra:'')+'</div>'+
       '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button id="op-no" class="btn">Cancelar</button><button id="op-si" class="btn" style="background:'+col+';border-color:'+col+';color:'+(v?'#fff':'#0b1120')+';font-weight:700">'+(v?'Vender':'Comprar')+' en '+CFG.nombre+'</button></div></div>';
