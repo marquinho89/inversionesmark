@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2857, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2858, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2858 | 2026-11-04 | Señales técnicas: aviso 📊 en la fila de la acción solo cuando una señal quedó activa y en el pasado se alejó de un día cualquiera.',
   'v2857 | 2026-11-04 | Señales técnicas: con poco historial muestra RSI y MACD y deja la MM200/Koncorde para cuando haya datos.',
   'v2856 | 2026-11-04 | Señales técnicas: botón 📊 en el detalle de cada acción con RSI, MM200, MACD y Koncorde, probados hacia atrás (casos, promedio a 20 ruedas, % que subió, vs. cualquier día).',
   'v2855 | 2026-11-04 | Popup de compra/venta: cartel ⚠️ REVISÁ ANTES DE REGISTRAR con latido y una sacudida al abrir.',
@@ -11542,7 +11543,7 @@ function nvRender(){
    var hd=document.querySelector('header');if(hd)hd.style.display='none';document.body.classList.add('nv-port');document.body.classList.add('nv-on');document.documentElement.classList.remove('nv-pre');}catch(e){}
   var main=document.getElementById('main');if(main){main.style.outline='2px solid '+col;main.style.outlineOffset='-2px';main.style.borderRadius='14px';}
   nvModo(NV.modo);}
- _nvMover();try{nvTermo();nvCalendario();nvMov();nvIdeal();nvPlanSalida();nvVal();nvLinea();}catch(e){console.warn('nv extras',e);}try{bcSwapCard();}catch(e){}
+ _nvMover();try{nvTermo();nvCalendario();nvMov();nvIdeal();nvPlanSalida();nvVal();nvLinea();setTimeout(function(){try{stChips();}catch(e){}},2500);}catch(e){console.warn('nv extras',e);}try{bcSwapCard();}catch(e){}
  var k=NV_K;document.getElementById('nv-kv').textContent=k.val!=null?'USD '+_nvN(k.val):'—';
  var kr=document.getElementById('nv-kr');kr.textContent=_nvP(k.rend);kr.style.color=k.rend>=0?'var(--accent)':'var(--red)';document.getElementById('nv-krs').textContent=k.gan!=null?((k.gan>=0?'+':'−')+'USD '+_nvN(Math.abs(k.gan))):'';
  var kh=document.getElementById('nv-kh');kh.textContent=_nvP(k.hoyP);kh.style.color=(k.hoyP||0)>=0?'var(--accent)':'var(--red)';document.getElementById('nv-khs').textContent=k.hoy!=null?((k.hoy>=0?'+':'−')+'USD '+_nvN(Math.abs(k.hoy))):'';
@@ -11565,7 +11566,7 @@ function nvRender(){
   var sh0='<tr class="sec"><td colspan="8">'+sg[1]+' <span style="color:var(--text3);font-weight:400">· '+X.length+' activos · <span class="port-sensitive">'+_nvM()+_nvN(X.reduce(function(s,o){return s+(_nvInv(o)||0);},0))+'</span></span></td></tr>';it.push({s:sh0,n:sg[1]});
   X.forEach(function(o){var pc=_nvPtCol(o),ab=!!op[o.t];
    var mk=MARKS[o.t],mki=mk?({sell:'🔴',buy:'🟢',watch:'⭐',note:'📝'})[mk.type]||'🏷':'🏷';
-   var r='<tr class="pick'+(ab?' abierta':'')+(mk&&mk.type!=='note'?' marked-'+mk.type:'')+'" onclick="nvAbrir(\''+o.t+'\')" title="Ver más"><td class="l"><span class="car">'+(ab?'▾':'▸')+'</span>'+(o.rv?'<span class="flg" title="'+(_nvPaisN[o.s]||'')+'">'+(_nvFlag[o.s]||'')+'</span>':'')+'<button class="mark-btn'+(mk?' active':'')+'" data-ticker="'+o.t+'" onclick="event.stopPropagation();openMarkPopover(this.dataset.ticker,this)" title="Marcar: Comprar, Vender, Seguir o nota">'+mki+'</button><b class="nvtk" style="font-family:var(--sans);font-size:.84rem"'+(_focoOn()?' onclick="event.stopPropagation();nvFoco(\''+o.t+'\')" title="Ver todo de '+o.t+'"':'')+'>'+o.t+'</b>'+(mk&&mk.note?'<span class="nvnote" data-tip="'+mk.note.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')+'">'+mk.note.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span>':'')+(o.fl?'<span class="nvf" data-tip="'+o.fl.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')+'" onclick="event.stopPropagation();nvTip(this,true)">F</span>':'')+(o.dh?'<span class="nvf nvd" data-tip="Por tu historial, estimamos un dividendo dentro de 30 días" onclick="event.stopPropagation();nvTip(this,true)">D</span>':'')+(typeof balBadge==='function'?balBadge(o.t):'')+(o.up!=null&&o.up<=0?'<span class="nvf" style="padding:0 3px;font-size:.74rem" data-tip="'+_tgtTip(o.t).replace(/"/g,'&quot;')+'" onclick="event.stopPropagation();nvTip(this,true)">🏁</span>':'')+(o.fin?'<span class="nvf nvfin" data-tip="A finish" onclick="event.stopPropagation();nvTip(this,true)">🏁</span>':'')+(o.ph?'<button class="ph-btn" data-tk="'+o.t+'" data-ppc="'+o.ppcU+'" onclick="event.stopPropagation();phAbrir(this.dataset.tk,+this.dataset.ppc)" title="Ver historial de precio" style="background:none;border:none;cursor:pointer;padding:0 0 0 5px;font-size:.74rem;opacity:.8">📈</button>':'')+'</td>'+
+   var r='<tr class="pick'+(ab?' abierta':'')+(mk&&mk.type!=='note'?' marked-'+mk.type:'')+'" onclick="nvAbrir(\''+o.t+'\')" title="Ver más"><td class="l"><span class="car">'+(ab?'▾':'▸')+'</span>'+(o.rv?'<span class="flg" title="'+(_nvPaisN[o.s]||'')+'">'+(_nvFlag[o.s]||'')+'</span>':'')+'<button class="mark-btn'+(mk?' active':'')+'" data-ticker="'+o.t+'" onclick="event.stopPropagation();openMarkPopover(this.dataset.ticker,this)" title="Marcar: Comprar, Vender, Seguir o nota">'+mki+'</button><b class="nvtk" style="font-family:var(--sans);font-size:.84rem"'+(_focoOn()?' onclick="event.stopPropagation();nvFoco(\''+o.t+'\')" title="Ver todo de '+o.t+'"':'')+'>'+o.t+'</b>'+(ST_CHIP[o.t]||'')+(mk&&mk.note?'<span class="nvnote" data-tip="'+mk.note.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')+'">'+mk.note.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span>':'')+(o.fl?'<span class="nvf" data-tip="'+o.fl.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')+'" onclick="event.stopPropagation();nvTip(this,true)">F</span>':'')+(o.dh?'<span class="nvf nvd" data-tip="Por tu historial, estimamos un dividendo dentro de 30 días" onclick="event.stopPropagation();nvTip(this,true)">D</span>':'')+(typeof balBadge==='function'?balBadge(o.t):'')+(o.up!=null&&o.up<=0?'<span class="nvf" style="padding:0 3px;font-size:.74rem" data-tip="'+_tgtTip(o.t).replace(/"/g,'&quot;')+'" onclick="event.stopPropagation();nvTip(this,true)">🏁</span>':'')+(o.fin?'<span class="nvf nvfin" data-tip="A finish" onclick="event.stopPropagation();nvTip(this,true)">🏁</span>':'')+(o.ph?'<button class="ph-btn" data-tk="'+o.t+'" data-ppc="'+o.ppcU+'" onclick="event.stopPropagation();phAbrir(this.dataset.tk,+this.dataset.ppc)" title="Ver historial de precio" style="background:none;border:none;cursor:pointer;padding:0 0 0 5px;font-size:.74rem;opacity:.8">📈</button>':'')+'</td>'+
     '<td><span class="dp" style="'+(o.d==null?'color:var(--text3)':'--dc:'+(o.d>=10?'var(--accent)':o.d>=0?'#eab308':'var(--red)'))+'">'+(o.d==null?'—':(Math.round(o.d)>0?'+':Math.round(o.d)<0?'−':'')+Math.abs(Math.round(o.d))+'%')+'</span></td>'+
     '<td class="up">'+upC(o.up)+'</td>'+
     '<td>'+_nvF(o.px,o)+(o.qh||'')+'</td>'+
@@ -11672,6 +11673,24 @@ async function stAbrir(tk){
     h+='</tbody></table><div style="color:var(--text3);font-size:.7rem;margin-top:10px">Es historia de este activo, no una predicción: con pocos casos o diferencias chicas (menos de 1 punto) la señal no aporta. Koncorde es una versión simplificada.</div>';
   }
   o.innerHTML=box(h);
+}
+
+
+// Aviso en la fila: solo cuando una señal quedó ACTIVA y en el pasado tuvo >=10 casos y se alejó >=1 punto de un día cualquiera.
+var ST_CHIP={},_stDone={},_stRunning=false;
+async function stChips(){
+  if(_stRunning||!NV_ROWS||!NV_ROWS.length)return;_stRunning=true;var cambio=false;
+  try{
+    var T=NV_ROWS.filter(function(o){return o.rv&&!_stDone[o.t]&&_phCat(getSector(o.t));});
+    for(var i=0;i<T.length;i++){var o=T[i];_stDone[o.t]=1;
+      try{var R=await _stCalc(o.t);if(R.err)continue;var ch=[];
+        R.def.forEach(function(g){g.ev.forEach(function(e){if(e.on&&e.bt.n>=10&&Math.abs(e.bt.avg-R.base.avg)>=1)ch.push({n:g.k==='rsi'?'RSI':g.k==='mm'?'MM200':g.k==='macd'?'MACD':'Koncorde',d:e.dir});});});
+        if(ch.length){ST_CHIP[o.t]=ch.slice(0,2).map(function(c){return '<span class="nvchip" style="padding:0 5px;margin-left:4px;font-size:.66rem;color:'+(c.d>0?'var(--accent)':'var(--red)')+'" title="Señal técnica activa (historial en el 📊 de abajo)" onclick="event.stopPropagation();stAbrir(\''+o.t+'\')">📊 '+c.n+(c.d>0?' ↑':' ↓')+'</span>';}).join('');cambio=true;}
+      }catch(e){}
+      await new Promise(function(r){setTimeout(r,300);});
+    }
+  }finally{_stRunning=false;}
+  if(cambio){try{nvRender();}catch(e){}}
 }
 
 // ─── 🌡 Termómetro · 📅 Calendario de ganancias · 🌙 Repaso nocturno (vista nueva) ─────────────
