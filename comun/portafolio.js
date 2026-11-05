@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2856, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2857, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2857 | 2026-11-04 | Señales técnicas: con poco historial muestra RSI y MACD y deja la MM200/Koncorde para cuando haya datos.',
   'v2856 | 2026-11-04 | Señales técnicas: botón 📊 en el detalle de cada acción con RSI, MM200, MACD y Koncorde, probados hacia atrás (casos, promedio a 20 ruedas, % que subió, vs. cualquier día).',
   'v2855 | 2026-11-04 | Popup de compra/venta: cartel ⚠️ REVISÁ ANTES DE REGISTRAR con latido y una sacudida al abrir.',
   'v2854 | 2026-11-04 | Aviso de compra/venta ya no muestra cuánto te queda invertido; "A finish" pasa a ⏳ (🏁 queda para objetivo alcanzado).',
@@ -11618,10 +11619,10 @@ function _stBack(ev,usd,H){var rs=[];ev.forEach(function(i){if(i+H<usd.length)rs
   if(!rs.length)return {n:0};var s=0,w=0;rs.forEach(function(x){s+=x;if(x>0)w++;});return {n:rs.length,avg:s/rs.length*100,win:w/rs.length*100};}
 async function _stCalc(tk){
   var s=getSector(tk),S=await _phSerie(tk,s),R=await _stOhlc(tk,s);
-  if(!S||!S.ser||S.ser.length<260)return {err:'Necesito al menos ~260 ruedas de historial y hay '+(S&&S.ser?S.ser.length:0)+'.'};
+  if(!S||!S.ser||S.ser.length<30)return {err:'Hay '+(S&&S.ser?S.ser.length:0)+' ruedas de historial y necesito al menos 30 para el RSI y el MACD (para la MM200 hacen falta ~200). Cuando junte más datos aparece solo.'};
   var d=S.ser.map(function(x){return x[0];}),c=S.ser.map(function(x){return x[1];}),n=c.length,H=20;
   var rsi=_stRsi(c),ma=_stSma(c,200),mc=_stMacd(c),kz=null,kmap={};
-  if(R.length>150){kz=_stKonc(R);R.forEach(function(r,i){kmap[r.d]=kz.azul[i];});}
+  if(R.length>150&&n>=150){kz=_stKonc(R);R.forEach(function(r,i){kmap[r.d]=kz.azul[i];});}
   var az=d.map(function(x){return kmap[x]!=null?kmap[x]:null;});
   var ok=function(v){return v!=null;};
   var base=[];for(var i=0;i+H<n;i++)base.push(c[i+H]/c[i]-1);var bavg=base.length?base.reduce(function(a,b){return a+b;},0)/base.length*100:0,bwin=base.length?base.filter(function(x){return x>0;}).length/base.length*100:0;
@@ -11630,13 +11631,14 @@ async function _stCalc(tk){
    {k:'rsi',nom:'RSI (14)',hoy:rc(rsi)!=null?rc(rsi).toFixed(0):'—',
     ev:[{t:'Sobreventa (RSI cruza bajo 30)',f:function(i){return ok(rsi[i])&&rsi[i]<30;},on:rc(rsi)!=null&&rc(rsi)<30,dir:1},
         {t:'Sobrecompra (RSI cruza sobre 70)',f:function(i){return ok(rsi[i])&&rsi[i]>70;},on:rc(rsi)!=null&&rc(rsi)>70,dir:-1}]},
-   {k:'mm',nom:'Media 200 ruedas',hoy:ok(ma[last])?(c[last]>ma[last]?'+':'')+((c[last]/ma[last]-1)*100).toFixed(1).replace('.',',')+'% vs MM200':'—',
+   n<210?null:{k:'mm',nom:'Media 200 ruedas',hoy:ok(ma[last])?(c[last]>ma[last]?'+':'')+((c[last]/ma[last]-1)*100).toFixed(1).replace('.',',')+'% vs MM200':'—',
     ev:[{t:'Precio cruza hacia arriba la MM200',f:function(i){return ok(ma[i])&&c[i]>ma[i];},on:ok(ma[last])&&c[last]>ma[last]&&c.slice(-10).some(function(x,j){var q=n-10+j;return ok(ma[q])&&x<=ma[q];}),dir:1},
         {t:'Precio cruza hacia abajo la MM200',f:function(i){return ok(ma[i])&&c[i]<ma[i];},on:ok(ma[last])&&c[last]<ma[last]&&c.slice(-10).some(function(x,j){var q=n-10+j;return ok(ma[q])&&x>=ma[q];}),dir:-1}]},
    {k:'macd',nom:'MACD (12,26,9)',hoy:ok(mc.m[last])&&ok(mc.s[last])?(mc.m[last]>mc.s[last]?'MACD sobre su señal':'MACD bajo su señal'):'—',
     ev:[{t:'MACD cruza hacia arriba su señal',f:function(i){return ok(mc.s[i])&&mc.m[i]>mc.s[i];},on:ok(mc.s[last])&&mc.m[last]>mc.s[last]&&mc.m[last-6]<=mc.s[last-6],dir:1},
         {t:'MACD cruza hacia abajo su señal',f:function(i){return ok(mc.s[i])&&mc.m[i]<mc.s[i];},on:ok(mc.s[last])&&mc.m[last]<mc.s[last]&&mc.m[last-6]>=mc.s[last-6],dir:-1}]}
   ];
+  def=def.filter(Boolean);
   if(kz)def.push({k:'konc',nom:'Koncorde (manos fuertes)',hoy:ok(az[last])?(az[last]>0?'Fuertes comprando ('+az[last].toFixed(0)+')':'Fuertes vendiendo ('+az[last].toFixed(0)+')'):'—',
     ev:[{t:'Manos fuertes pasan a comprar (azul cruza sobre 0)',f:function(i){return ok(az[i])&&az[i]>0;},on:ok(az[last])&&az[last]>0&&az.slice(-6,-1).some(function(x){return ok(x)&&x<=0;}),dir:1},
         {t:'Manos fuertes pasan a vender (azul cruza bajo 0)',f:function(i){return ok(az[i])&&az[i]<0;},on:ok(az[last])&&az[last]<0&&az.slice(-6,-1).some(function(x){return ok(x)&&x>=0;}),dir:-1}]});
