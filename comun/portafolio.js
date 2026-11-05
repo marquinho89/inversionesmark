@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2855, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2856, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2856 | 2026-11-04 | Señales técnicas: botón 📊 en el detalle de cada acción con RSI, MM200, MACD y Koncorde, probados hacia atrás (casos, promedio a 20 ruedas, % que subió, vs. cualquier día).',
   'v2855 | 2026-11-04 | Popup de compra/venta: cartel ⚠️ REVISÁ ANTES DE REGISTRAR con latido y una sacudida al abrir.',
   'v2854 | 2026-11-04 | Aviso de compra/venta ya no muestra cuánto te queda invertido; "A finish" pasa a ⏳ (🏁 queda para objetivo alcanzado).',
   'v2853 | 2026-11-04 | Objetivo alcanzado: el punto verde pasa a ser una bandera a cuadros 🏁 con borde verde.',
@@ -11577,7 +11578,7 @@ function nvRender(){
     '<div><div class="nvlbl">'+(o.rv?'RSI':'TIR')+'</div><b>'+(o.rsiH||'<span style="color:var(--text3)">—</span>')+'</b></div>'+
     (function(){var x=_valOn()&&_valOk(o)?_valDe(o.t):null;if(!x)return '';var nf=function(v){return v.toLocaleString('es-AR',{maximumFractionDigits:v<100?2:0});};
      return (x.pe>0?'<div><div class="nvlbl">P/E vs mediana 5 años</div><b>'+x.pe.toFixed(1).replace('.',',')+'</b> '+_valPill(x)+'</div>':'')+(x.pos!=null?'<div><div class="nvlbl">52 semanas (USD)</div><b>'+nf(x.lo)+' – '+nf(x.hi)+'</b> <span style="font-size:.7rem;color:var(--text2)">'+(x.dmax<0?'−':'')+Math.abs(x.dmax).toFixed(1).replace('.',',')+'% del máx.</span></div>':'');})()+
-    '<div style="margin-left:auto;align-self:center;display:flex;gap:6px">'+(typeof _bcEs==='function'&&_bcEs(o.t)?'<span class="nvchip" onclick="event.stopPropagation();bcModal(\''+o.t+'\')">📈 TIR CER</span>':(typeof _hdEs==='function'&&_hdEs(o.t)?'<span class="nvchip" onclick="event.stopPropagation();hdModal(\''+o.t+'\')">📈 TIR USD</span>':''))+'<span class="nvchip" onclick="event.stopPropagation();ppcHist(\''+o.t+'\')">🧾 Historia del PPC</span><span class="nvchip" onclick="event.stopPropagation();nvComprar(\''+o.t+'\')">🛒 Comprar</span><span class="nvchip" onclick="event.stopPropagation();nvVender(\''+o.t+'\')">💸 Vender</span></div>'+
+    '<div style="margin-left:auto;align-self:center;display:flex;gap:6px">'+(typeof _bcEs==='function'&&_bcEs(o.t)?'<span class="nvchip" onclick="event.stopPropagation();bcModal(\''+o.t+'\')">📈 TIR CER</span>':(typeof _hdEs==='function'&&_hdEs(o.t)?'<span class="nvchip" onclick="event.stopPropagation();hdModal(\''+o.t+'\')">📈 TIR USD</span>':''))+''+(o.rv?'<span class="nvchip" onclick="event.stopPropagation();stAbrir(\''+o.t+'\')">📊 Señales técnicas</span>':'')+'<span class="nvchip" onclick="event.stopPropagation();ppcHist(\''+o.t+'\')">🧾 Historia del PPC</span><span class="nvchip" onclick="event.stopPropagation();nvComprar(\''+o.t+'\')">🛒 Comprar</span><span class="nvchip" onclick="event.stopPropagation();nvVender(\''+o.t+'\')">💸 Vender</span></div>'+
     '</div></td></tr>';
    it.push({r:r});});});
  var tb=function(arr){return '<div class="nvtw"><table>'+h+arr.join('')+'</tbody></table></div>';},nA=it.filter(function(x){return x.r;}).length;
@@ -11588,6 +11589,87 @@ function nvRender(){
   out='<div class="nv2col">'+tb(A)+tb(B)+'</div>';}
  document.getElementById('nv-tw2').innerHTML=out;
  if(!window._nvRz){window._nvRz=1;var _w=window.innerWidth>=1500;window.addEventListener('resize',function(){var w=window.innerWidth>=1500;if(w!==_w){_w=w;nvRender();}});}
+}
+
+// ─── 📊 Señales técnicas (RSI · MM200 · MACD · Koncorde) con prueba hacia atrás ─────────────
+// Sin puntaje total: cada indicador se muestra solo, con cuántas veces dio señal en el pasado y qué pasó a las 20 ruedas.
+var _stRaw={};
+async function _stOhlc(tk,s){
+  if(_stRaw[tk])return _stRaw[tk];var cat=_phCat(s),rows=[];
+  if(cat){try{var r=await fetchWithTimeout('https://data912.com/historical/'+cat+'/'+encodeURIComponent(tk),{headers:{Accept:'application/json'}},15000);
+    if(r.ok){var a=await r.json();(Array.isArray(a)?a:[]).forEach(function(x){var c=parseFloat(x.c);if(x.date&&c>0)rows.push({d:x.date,h:parseFloat(x.h)||c,l:parseFloat(x.l)||c,c:c,v:parseFloat(x.v)||0});});}}catch(e){}}
+  rows.sort(function(a,b){return a.d<b.d?-1:1;});if(rows.length)_stRaw[tk]=rows;return rows;
+}
+function _stEma(a,n){var k=2/(n+1),o=[],p=null;for(var i=0;i<a.length;i++){if(a[i]==null){o.push(null);continue;}p=p==null?a[i]:a[i]*k+p*(1-k);o.push(p);}return o;}
+function _stRsi(c,n){n=n||14;var o=[],g=0,l=0;for(var i=0;i<c.length;i++){if(i===0){o.push(null);continue;}var d=c[i]-c[i-1],up=Math.max(d,0),dn=Math.max(-d,0);
+  if(i<=n){g+=up;l+=dn;if(i===n){g/=n;l/=n;o.push(l===0?100:100-100/(1+g/l));}else o.push(null);}
+  else{g=(g*(n-1)+up)/n;l=(l*(n-1)+dn)/n;o.push(l===0?100:100-100/(1+g/l));}}return o;}
+function _stSma(c,n){var o=[],s=0;for(var i=0;i<c.length;i++){s+=c[i];if(i>=n)s-=c[i-n];o.push(i>=n-1?s/n:null);}return o;}
+function _stMacd(c){var e12=_stEma(c,12),e26=_stEma(c,26),m=c.map(function(_,i){return i>=25?e12[i]-e26[i]:null;}),sg=_stEma(m,9);return {m:m,s:sg};}
+// Koncorde simplificado (Blai5): "manos fuertes" (azul) y "manos débiles" (verde) a partir de volumen y variación de precio.
+function _stKonc(rows){var nvi=[1],pvi=[1];
+  for(var i=1;i<rows.length;i++){var r=rows[i].c/rows[i-1].c-1;if(!isFinite(r)||r>0.8||r<-0.45)r=0;
+    nvi.push(rows[i].v<rows[i-1].v?nvi[i-1]*(1+r):nvi[i-1]);pvi.push(rows[i].v>rows[i-1].v?pvi[i-1]*(1+r):pvi[i-1]);}
+  var osc=function(x){var e=_stEma(x,15);return x.map(function(_,i){if(i<90)return null;var w=x.slice(i-89,i+1),mx=Math.max.apply(null,w),mn=Math.min.apply(null,w);return mx>mn?(x[i]-e[i])*100/(mx-mn):0;});};
+  return {azul:osc(nvi),verde:osc(pvi)};}
+// eventos: días en que la condición pasa de falsa a verdadera (mínimo 10 ruedas entre eventos)
+function _stEv(n,fn){var ev=[],last=-99;for(var i=1;i<n;i++){if(fn(i)&&!fn(i-1)&&i-last>=10){ev.push(i);last=i;}}return ev;}
+function _stBack(ev,usd,H){var rs=[];ev.forEach(function(i){if(i+H<usd.length)rs.push(usd[i+H]/usd[i]-1);});
+  if(!rs.length)return {n:0};var s=0,w=0;rs.forEach(function(x){s+=x;if(x>0)w++;});return {n:rs.length,avg:s/rs.length*100,win:w/rs.length*100};}
+async function _stCalc(tk){
+  var s=getSector(tk),S=await _phSerie(tk,s),R=await _stOhlc(tk,s);
+  if(!S||!S.ser||S.ser.length<260)return {err:'Necesito al menos ~260 ruedas de historial y hay '+(S&&S.ser?S.ser.length:0)+'.'};
+  var d=S.ser.map(function(x){return x[0];}),c=S.ser.map(function(x){return x[1];}),n=c.length,H=20;
+  var rsi=_stRsi(c),ma=_stSma(c,200),mc=_stMacd(c),kz=null,kmap={};
+  if(R.length>150){kz=_stKonc(R);R.forEach(function(r,i){kmap[r.d]=kz.azul[i];});}
+  var az=d.map(function(x){return kmap[x]!=null?kmap[x]:null;});
+  var ok=function(v){return v!=null;};
+  var base=[];for(var i=0;i+H<n;i++)base.push(c[i+H]/c[i]-1);var bavg=base.length?base.reduce(function(a,b){return a+b;},0)/base.length*100:0,bwin=base.length?base.filter(function(x){return x>0;}).length/base.length*100:0;
+  var last=n-1,rc=function(a){return ok(a[last])?a[last]:null;};
+  var def=[
+   {k:'rsi',nom:'RSI (14)',hoy:rc(rsi)!=null?rc(rsi).toFixed(0):'—',
+    ev:[{t:'Sobreventa (RSI cruza bajo 30)',f:function(i){return ok(rsi[i])&&rsi[i]<30;},on:rc(rsi)!=null&&rc(rsi)<30,dir:1},
+        {t:'Sobrecompra (RSI cruza sobre 70)',f:function(i){return ok(rsi[i])&&rsi[i]>70;},on:rc(rsi)!=null&&rc(rsi)>70,dir:-1}]},
+   {k:'mm',nom:'Media 200 ruedas',hoy:ok(ma[last])?(c[last]>ma[last]?'+':'')+((c[last]/ma[last]-1)*100).toFixed(1).replace('.',',')+'% vs MM200':'—',
+    ev:[{t:'Precio cruza hacia arriba la MM200',f:function(i){return ok(ma[i])&&c[i]>ma[i];},on:ok(ma[last])&&c[last]>ma[last]&&c.slice(-10).some(function(x,j){var q=n-10+j;return ok(ma[q])&&x<=ma[q];}),dir:1},
+        {t:'Precio cruza hacia abajo la MM200',f:function(i){return ok(ma[i])&&c[i]<ma[i];},on:ok(ma[last])&&c[last]<ma[last]&&c.slice(-10).some(function(x,j){var q=n-10+j;return ok(ma[q])&&x>=ma[q];}),dir:-1}]},
+   {k:'macd',nom:'MACD (12,26,9)',hoy:ok(mc.m[last])&&ok(mc.s[last])?(mc.m[last]>mc.s[last]?'MACD sobre su señal':'MACD bajo su señal'):'—',
+    ev:[{t:'MACD cruza hacia arriba su señal',f:function(i){return ok(mc.s[i])&&mc.m[i]>mc.s[i];},on:ok(mc.s[last])&&mc.m[last]>mc.s[last]&&mc.m[last-6]<=mc.s[last-6],dir:1},
+        {t:'MACD cruza hacia abajo su señal',f:function(i){return ok(mc.s[i])&&mc.m[i]<mc.s[i];},on:ok(mc.s[last])&&mc.m[last]<mc.s[last]&&mc.m[last-6]>=mc.s[last-6],dir:-1}]}
+  ];
+  if(kz)def.push({k:'konc',nom:'Koncorde (manos fuertes)',hoy:ok(az[last])?(az[last]>0?'Fuertes comprando ('+az[last].toFixed(0)+')':'Fuertes vendiendo ('+az[last].toFixed(0)+')'):'—',
+    ev:[{t:'Manos fuertes pasan a comprar (azul cruza sobre 0)',f:function(i){return ok(az[i])&&az[i]>0;},on:ok(az[last])&&az[last]>0&&az.slice(-6,-1).some(function(x){return ok(x)&&x<=0;}),dir:1},
+        {t:'Manos fuertes pasan a vender (azul cruza bajo 0)',f:function(i){return ok(az[i])&&az[i]<0;},on:ok(az[last])&&az[last]<0&&az.slice(-6,-1).some(function(x){return ok(x)&&x>=0;}),dir:-1}]});
+  def.forEach(function(g){g.ev.forEach(function(e){e.bt=_stBack(_stEv(n,e.f),c,H);});});
+  return {def:def,base:{avg:bavg,win:bwin,n:base.length},desde:d[0],hasta:d[last],H:H};
+}
+function stCerrar(){var o=document.getElementById('st-modal');if(o)o.style.display='none';}
+async function stAbrir(tk){
+  var o=document.getElementById('st-modal');
+  if(!o){o=document.createElement('div');o.id='st-modal';o.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px';
+    o.onclick=function(e){if(e.target===o)stCerrar();};document.body.appendChild(o);document.addEventListener('keydown',function(e){if(e.key==='Escape')stCerrar();});}
+  o.style.display='flex';var box=function(x){return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;width:min(820px,100%);max-height:94vh;overflow:auto;padding:14px 16px;color:var(--text)">'+x+'</div>';};
+  var tkS=String(tk).replace(/[<>&"]/g,'');
+  o.innerHTML=box('<b>📊 Señales técnicas · '+tkS+'</b><div style="color:var(--text3);margin-top:10px">Calculando con el historial…</div>');
+  var R;try{R=await _stCalc(tk);}catch(e){R={err:'No pude calcularlo ('+(e&&e.message||e)+').'};}
+  var f1=function(x){return (x>0?'+':'')+x.toFixed(1).replace('.',',')+'%';};
+  var h='<div style="display:flex;align-items:center;gap:10px"><b style="font-size:1.05rem">📊 Señales técnicas · '+tkS+'</b><button class="btn btn-sm" style="margin-left:auto" onclick="stCerrar()">✕</button></div>';
+  if(R.err)h+='<div style="color:var(--text2);margin-top:12px">'+R.err+'</div>';
+  else{
+    h+='<div style="color:var(--text3);font-size:.74rem;margin:4px 0 10px">Historial en USD de '+R.desde+' a '+R.hasta+'. Cada fila dice cuántas veces dio esa señal en el pasado y qué pasó <b>20 ruedas después</b>. Sin puntaje total: cada indicador va solo.</div>';
+    h+='<div style="font-size:.78rem;color:var(--text2);margin-bottom:8px">Referencia (cualquier día): a 20 ruedas rindió en promedio <b>'+f1(R.base.avg)+'</b> y subió en el <b>'+Math.round(R.base.win)+'%</b> de los casos ('+R.base.n+' días).</div>';
+    h+='<table style="width:100%;border-collapse:collapse;font-size:.78rem"><thead><tr style="color:var(--text3);text-align:left"><th style="padding:4px 6px">Señal</th><th>Casos</th><th>Prom. a 20 ruedas</th><th>Subió</th><th>Vs. referencia</th></tr></thead><tbody>';
+    R.def.forEach(function(g){
+      h+='<tr><td colspan="5" style="padding:10px 6px 3px;border-top:1px solid var(--border)"><b>'+g.nom+'</b> <span style="color:var(--text2)">· hoy: '+g.hoy+'</span></td></tr>';
+      g.ev.forEach(function(e){var b=e.bt;
+        h+='<tr><td style="padding:3px 6px">'+(e.on?'<span style="background:#e3b341;color:#0b1120;border-radius:4px;padding:0 5px;font-weight:800;font-size:.68rem;margin-right:5px">ACTIVA</span>':'')+e.t+'</td>';
+        if(b.n<10)h+='<td colspan="4" style="color:var(--text3)">'+b.n+' casos: muy pocos para sacar conclusiones</td></tr>';
+        else{var dif=b.avg-R.base.avg;h+='<td>'+b.n+'</td><td style="color:'+(b.avg>=0?'var(--accent)':'var(--red)')+'">'+f1(b.avg)+'</td><td>'+Math.round(b.win)+'%</td><td style="color:'+(Math.abs(dif)<1?'var(--text3)':dif>0?'var(--accent)':'var(--red)')+'">'+(Math.abs(dif)<1?'igual que cualquier día':f1(dif)+' pts')+'</td></tr>';}
+      });
+    });
+    h+='</tbody></table><div style="color:var(--text3);font-size:.7rem;margin-top:10px">Es historia de este activo, no una predicción: con pocos casos o diferencias chicas (menos de 1 punto) la señal no aporta. Koncorde es una versión simplificada.</div>';
+  }
+  o.innerHTML=box(h);
 }
 
 // ─── 🌡 Termómetro · 📅 Calendario de ganancias · 🌙 Repaso nocturno (vista nueva) ─────────────
