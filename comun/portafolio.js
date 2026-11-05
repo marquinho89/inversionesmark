@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2853, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2854, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2854 | 2026-11-04 | Aviso de compra/venta ya no muestra cuánto te queda invertido; "A finish" pasa a ⏳ (🏁 queda para objetivo alcanzado).',
   'v2853 | 2026-11-04 | Objetivo alcanzado: el punto verde pasa a ser una bandera a cuadros 🏁 con borde verde.',
   'v2852 | 2026-11-04 | Importar: después de confirmar, ofrece guardar como objetivo/máximo las ventas de los últimos 30 días que superan el objetivo actual (sin tildar de entrada).',
   'v2850 | 2026-11-04 | Venta rápida: tilde para guardar el precio de venta como objetivo; reemplaza el anterior solo si es más alto en USD.',
@@ -3899,7 +3900,7 @@ function renderMovimientos(){
       '<td style="white-space:nowrap">'+
         '<div style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap">'+
           reduceHtml+
-          '<button class="btn btn-sm" onclick="toggleFinish('+sid+')" title="A finish" style="'+(m.finish?'color:var(--amber);border-color:#3e2c10':'opacity:.3')+'">🏁</button>'+
+          '<button class="btn btn-sm" onclick="toggleFinish('+sid+')" title="A finish" style="'+(m.finish?'color:var(--amber);border-color:#3e2c10':'opacity:.3')+'">⏳</button>'+
           '<button class="btn btn-sm" onclick="movModalOpen('+sid+')" title="Editar">✎</button>'+
           '<button class="btn btn-d btn-sm" onclick="deleteMov('+sid+')" title="Borrar">✕</button>'+
         '</div>'+
@@ -10648,7 +10649,7 @@ function _opMktNom(id){var e=document.getElementById(id);return e&&e.selectedInd
     _opEnvolver('vsellConfirmar',function(){var t=_opVal('vsell-ticker').trim().toUpperCase(),q=parseFloat(_opVal('vsell-qty')),p=parseFloat(_opVal('vsell-precio-ars'));
       var pos=null;try{pos=getPositions().find(function(x){return x.ticker===t;});}catch(e){}
       var s=getSector(t),bo=(s==='bonos'||s==='on');var pv=document.getElementById('vsell-preview');
-      var ext=(pos?'Te quedan '+Math.max(0,Math.round((pos.qty-q)*100)/100).toLocaleString('es-AR')+' '+t:'')+(pv&&pv.innerText&&pv.innerText.length<260?'<br><span style="color:var(--text3)">'+pv.innerText.replace(/</g,'&lt;').replace(/\n+/g,' · ')+'</span>':'');
+      var ext=(pv&&pv.innerText&&pv.innerText.length<260?'<span style="color:var(--text3)">'+pv.innerText.replace(/</g,'&lt;').replace(/\n+/g,' · ')+'</span>':'');
       return {tipo:'venta',ticker:t,qty:q,precio:p,unidad:bo?'c/100 nominales':'',total:bo?q*p/100:q*p,fecha:_opFecha('vsell-fecha'),extra:ext};});
     _opEnvolver('addMov',function(){var tp=_opVal('m-tipo');if(tp!=='compra'&&tp!=='venta')return null;var mk=_opVal('m-mkt'),bo=(mk==='BONOS'||mk==='ON'),q=Math.abs(parseFloat(_opVal('m-qty'))),p=parseFloat(_opVal('m-precio-ars'));
       return {tipo:tp,ticker:_opVal('m-ticker').trim().toUpperCase(),qty:q,precio:p,unidad:bo?'c/100 nominales':'',total:bo?q*p/100:q*p,fecha:_opFecha('m-fecha'),mkt:_opMktNom('m-mkt')};});
