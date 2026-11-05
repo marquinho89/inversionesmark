@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2861, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2862, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2862 | 2026-11-05 | Pares: reintenta si data912 no responde (varios pares quedaban con 16 ruedas) y no guarda historiales incompletos.',
   'v2861 | 2026-11-05 | Estrategia: panel 🔀 Pares que se mueven juntos (correlación, separación hoy y prueba hacia atrás con comisiones).',
   'v2860 | 2026-11-04 | Rotación para analizar: ahora es un desplegable (cerrado por defecto).',
   'v2859 | 2026-11-04 | V3.0 — Señales técnicas rediseñadas: resumen de hoy, indicadores visuales, gráfico con cruces, tarjetas de entrada/salida con veredicto y ayuda. Para volver atrás: commit 061df1f.',
@@ -11209,8 +11210,9 @@ function _phSplits(ser){
 async function _phSerie(tk,s){
   if(_phSer[tk])return _phSer[tk];
   var raw={},src={d912:0,propio:0},cat=_phCat(s);
-  if(cat){try{var r=await fetchWithTimeout('https://data912.com/historical/'+cat+'/'+encodeURIComponent(tk),{headers:{Accept:'application/json'}},15000);
-    if(r.ok){var a=await r.json();(Array.isArray(a)?a:[]).forEach(function(x){var c=parseFloat(x.c);if(x.date&&c>0){raw[x.date]=c;src.d912++;}});}}catch(e){}}
+  if(cat){for(var _t=0;_t<3&&!src.d912;_t++){if(_t)await new Promise(function(r){setTimeout(r,1200*_t);});
+    try{var r=await fetchWithTimeout('https://data912.com/historical/'+cat+'/'+encodeURIComponent(tk),{headers:{Accept:'application/json'}},15000);
+    if(r.ok){var a=await r.json();(Array.isArray(a)?a:[]).forEach(function(x){var c=parseFloat(x.c);if(x.date&&c>0){raw[x.date]=c;src.d912++;}});}}catch(e){}}}
   try{var r2=await fetchWithTimeout(SUPABASE_URL+'/rest/v1/precios_hist?select=fecha,px:precios->>'+encodeURIComponent(String(tk).toUpperCase())+'&order=fecha.asc&limit=5000',{headers:sbHeaders()},12000);
     if(r2.ok){(await r2.json()||[]).forEach(function(x){var v=parseFloat(x.px);if(x.fecha&&v>0&&raw[x.fecha]==null){raw[x.fecha]=v;src.propio++;}});}}catch(e){}
   var usdDir=isBonoUSDDirecto(tk),fx=usdDir?{}:await _phFxLoad((s==='bonos'||s==='on')?'bolsa':'contadoconliqui');
@@ -11222,7 +11224,7 @@ async function _phSerie(tk,s){
   });
   if(s!=='bonos'&&s!=='on')ser=_phSplits(ser);
   var res={ser:ser,src:src,fxOk:usdDir||fxK.length>0};
-  if(ser.length)_phSer[tk]=res;
+  if(ser.length&&!(cat&&!src.d912))_phSer[tk]=res; // si data912 falló no se guarda, para reintentar la próxima vez
   return res;
 }
 function phCerrar(){var o=document.getElementById('ph-modal');if(o)o.style.display='none';if(_phChart){try{_phChart.destroy();}catch(e){}_phChart=null;}}
@@ -13332,7 +13334,7 @@ async function estPares(){
   if(EST.busy)return;EST.busy='par';EST.msg='Bajando historiales para los pares…';estRender();
   try{var L=_parLista(),need={},ser={};L.forEach(function(x){need[x.a]=1;need[x.b]=1;});var ks=Object.keys(need);
     for(var i=0;i<ks.length;i++){EST.msg='Bajando historiales… '+(i+1)+' de '+ks.length;try{estRender();}catch(e){}
-      try{var o=await _phSerie(ks[i],getSector(ks[i]));ser[ks[i]]=(o&&o.ser)||[];}catch(e){ser[ks[i]]=[];}}
+      try{var o=await _phSerie(ks[i],getSector(ks[i]));ser[ks[i]]=(o&&o.ser)||[];}catch(e){ser[ks[i]]=[];}await new Promise(function(r){setTimeout(r,350);});}
     var out=[];L.forEach(function(x){if(!ser[x.a].length||!ser[x.b].length){out.push({p:x,err:'sin historial de '+(!ser[x.a].length?x.a:x.b)});return;}
       var c=_parCalc(ser[x.a].slice(-760),ser[x.b].slice(-760));out.push(Object.assign({p:x},c));});
     out.sort(function(a,b){if(!!a.err!==!!b.err)return a.err?1:-1;if(a.err)return 0;var fa=Math.abs(a.z||0)>=2&&a.r>=0.6?1:0,fb=Math.abs(b.z||0)>=2&&b.r>=0.6?1:0;return fb-fa||Math.abs(b.z||0)-Math.abs(a.z||0);});
