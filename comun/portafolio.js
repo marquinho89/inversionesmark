@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2862, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2863, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2863 | 2026-11-05 | Pares: el motivo de "poco historial" ahora indica cuántas ruedas devolvió data912 por ticker.',
   'v2862 | 2026-11-05 | Pares: reintenta si data912 no responde (varios pares quedaban con 16 ruedas) y no guarda historiales incompletos.',
   'v2861 | 2026-11-05 | Estrategia: panel 🔀 Pares que se mueven juntos (correlación, separación hoy y prueba hacia atrás con comisiones).',
   'v2860 | 2026-11-04 | Rotación para analizar: ahora es un desplegable (cerrado por defecto).',
@@ -13332,11 +13333,11 @@ function _parCalc(A,B){ // A y B: [[fecha,precio],...] en USD
   return {r:r,z:z[last],n:n,r20a:r20a*100,r20b:r20b*100,bt:{n:cnt,avg:avg,conv:conv,neto:neto,avgNeto:avg==null?null:avg-_PAR_COSTO}};}
 async function estPares(){
   if(EST.busy)return;EST.busy='par';EST.msg='Bajando historiales para los pares…';estRender();
-  try{var L=_parLista(),need={},ser={};L.forEach(function(x){need[x.a]=1;need[x.b]=1;});var ks=Object.keys(need);
+  try{var L=_parLista(),need={},ser={},fuente={};L.forEach(function(x){need[x.a]=1;need[x.b]=1;});var ks=Object.keys(need);
     for(var i=0;i<ks.length;i++){EST.msg='Bajando historiales… '+(i+1)+' de '+ks.length;try{estRender();}catch(e){}
-      try{var o=await _phSerie(ks[i],getSector(ks[i]));ser[ks[i]]=(o&&o.ser)||[];}catch(e){ser[ks[i]]=[];}await new Promise(function(r){setTimeout(r,350);});}
+      try{var o=await _phSerie(ks[i],getSector(ks[i]));ser[ks[i]]=(o&&o.ser)||[];fuente[ks[i]]=(o&&o.src)||null;}catch(e){ser[ks[i]]=[];}await new Promise(function(r){setTimeout(r,350);});}
     var out=[];L.forEach(function(x){if(!ser[x.a].length||!ser[x.b].length){out.push({p:x,err:'sin historial de '+(!ser[x.a].length?x.a:x.b)});return;}
-      var c=_parCalc(ser[x.a].slice(-760),ser[x.b].slice(-760));out.push(Object.assign({p:x},c));});
+      var c=_parCalc(ser[x.a].slice(-760),ser[x.b].slice(-760));if(c.err){var fa=fuente[x.a],fb=fuente[x.b];c.err+=' · data912: '+x.a+' '+(fa?fa.d912:'?')+', '+x.b+' '+(fb?fb.d912:'?')+' ruedas';}out.push(Object.assign({p:x},c));});
     out.sort(function(a,b){if(!!a.err!==!!b.err)return a.err?1:-1;if(a.err)return 0;var fa=Math.abs(a.z||0)>=2&&a.r>=0.6?1:0,fb=Math.abs(b.z||0)>=2&&b.r>=0.6?1:0;return fb-fa||Math.abs(b.z||0)-Math.abs(a.z||0);});
     EST.pares={rows:out,ts:Date.now()};EST.msg='';
   }catch(e){EST.msg='No se pudo calcular: '+(e&&e.message||e);}
