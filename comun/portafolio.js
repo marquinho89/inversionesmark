@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2860, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2861, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2861 | 2026-11-05 | Estrategia: panel 🔀 Pares que se mueven juntos (correlación, separación hoy y prueba hacia atrás con comisiones).',
   'v2860 | 2026-11-04 | Rotación para analizar: ahora es un desplegable (cerrado por defecto).',
   'v2859 | 2026-11-04 | V3.0 — Señales técnicas rediseñadas: resumen de hoy, indicadores visuales, gráfico con cruces, tarjetas de entrada/salida con veredicto y ayuda. Para volver atrás: commit 061df1f.',
   'v2858 | 2026-11-04 | Señales técnicas: aviso 📊 en la fila de la acción solo cuando una señal quedó activa y en el pasado se alejó de un día cualquiera.',
@@ -13296,6 +13297,69 @@ async function estInsiders(){
     await new Promise(function(res){setTimeout(res,1100);});}
   EST.ins=out;if(EST.msg.indexOf('límite')<0)EST.msg='';EST.busy='';estRender();
 }
+
+// ── 🔀 Pares que se mueven juntos: cuál se despegó de su compañero y qué pasó en el pasado cuando eso ocurrió ──
+var PARES_BASE=[['KO','PEP'],['V','MA'],['XOM','CVX'],['HD','LOW'],['JPM','BAC'],['WMT','COST'],['MCD','SBUX'],['PG','CL'],['GOOGL','META'],['MSFT','AAPL'],['AMD','NVDA'],['DIS','NFLX']];
+var _PAR_COSTO=3.6; // % de comisiones de vender uno y comprar el otro (ida y vuelta de las dos puntas), como en el resto de la app
+function _parCustom(){try{return JSON.parse(localStorage.getItem(PFX+'est_pares')||'[]')||[];}catch(e){return [];}}
+function parAgregar(){var a=((document.getElementById('par-a')||{}).value||'').trim().toUpperCase(),b=((document.getElementById('par-b')||{}).value||'').trim().toUpperCase();
+  if(!a||!b||a===b){EST.msg='Escribí dos tickers distintos.';estRender();return;}var L=_parCustom();if(!L.some(function(x){return x[0]===a&&x[1]===b;}))L.push([a,b]);
+  try{localStorage.setItem(PFX+'est_pares',JSON.stringify(L));}catch(e){}EST.msg='';EST.pares=null;estRender();}
+function parQuitar(i){var L=_parCustom();L.splice(i,1);try{localStorage.setItem(PFX+'est_pares',JSON.stringify(L));}catch(e){}estRender();}
+function _parLista(){var L=PARES_BASE.map(function(x){return {a:x[0],b:x[1],c:0};});
+  _parCustom().forEach(function(x,i){L.push({a:x[0],b:x[1],c:1,i:i});});
+  // pares entre tus acciones y Cedears más grandes (por rubro parecido no se filtra: lo decide la correlación)
+  var T=[];try{T=estPos().L.filter(function(o){return o.rv!==false;}).slice(0,8).map(function(o){return o.tk;});}catch(e){}
+  try{estTickers().forEach(function(t){if(T.indexOf(t)<0&&T.length<12)T.push(t);});}catch(e){}
+  for(var i=0;i<T.length;i++)for(var j=i+1;j<T.length;j++){if(!L.some(function(x){return (x.a===T[i]&&x.b===T[j])||(x.a===T[j]&&x.b===T[i]);}))L.push({a:T[i],b:T[j],c:2});}
+  return L;}
+function _parCalc(A,B){ // A y B: [[fecha,precio],...] en USD
+  var mb={};B.forEach(function(x){mb[x[0]]=x[1];});var d=[],pa=[],pb=[];A.forEach(function(x){if(mb[x[0]]>0&&x[1]>0){d.push(x[0]);pa.push(x[1]);pb.push(mb[x[0]]);}});
+  var n=d.length;if(n<200)return {err:'poco historial ('+n+' ruedas en común)'};
+  var ra=[],rb=[];for(var i=1;i<n;i++){ra.push(pa[i]/pa[i-1]-1);rb.push(pb[i]/pb[i-1]-1);}
+  var k=Math.min(250,ra.length),xa=ra.slice(-k),xb=rb.slice(-k),ma=xa.reduce(function(s,v){return s+v;},0)/k,mb2=xb.reduce(function(s,v){return s+v;},0)/k,sxy=0,sxx=0,syy=0;
+  for(var q=0;q<k;q++){sxy+=(xa[q]-ma)*(xb[q]-mb2);sxx+=(xa[q]-ma)*(xa[q]-ma);syy+=(xb[q]-mb2)*(xb[q]-mb2);}
+  var r=sxx>0&&syy>0?sxy/Math.sqrt(sxx*syy):0;
+  var sp=pa.map(function(v,i){return Math.log(v/pb[i]);}),W=120,z=[];
+  for(var i2=0;i2<n;i2++){if(i2<W){z.push(null);continue;}var w=sp.slice(i2-W,i2),m=w.reduce(function(s,v){return s+v;},0)/W,sd=Math.sqrt(w.reduce(function(s,v){return s+(v-m)*(v-m);},0)/W);z.push(sd>0?(sp[i2]-m)/sd:null);}
+  var H=20,last=n-1,ev=[],lastE=-99;
+  for(var j=W+1;j<n;j++){if(z[j]!=null&&z[j-1]!=null&&Math.abs(z[j])>=2&&Math.abs(z[j-1])<2&&j-lastE>=10){ev.push(j);lastE=j;}}
+  var res=[];ev.forEach(function(j){if(j+H>=n)return;var ga=pa[j+H]/pa[j]-1,gb=pb[j+H]/pb[j]-1,rel=z[j]>0?(gb-ga):(ga-gb);res.push(rel*100);});
+  var cnt=res.length,avg=cnt?res.reduce(function(s,v){return s+v;},0)/cnt:null,conv=cnt?res.filter(function(v){return v>0;}).length/cnt*100:null,neto=cnt?res.filter(function(v){return v>_PAR_COSTO;}).length/cnt*100:null;
+  var r20a=pa[last]/pa[Math.max(0,last-20)]-1,r20b=pb[last]/pb[Math.max(0,last-20)]-1;
+  return {r:r,z:z[last],n:n,r20a:r20a*100,r20b:r20b*100,bt:{n:cnt,avg:avg,conv:conv,neto:neto,avgNeto:avg==null?null:avg-_PAR_COSTO}};}
+async function estPares(){
+  if(EST.busy)return;EST.busy='par';EST.msg='Bajando historiales para los pares…';estRender();
+  try{var L=_parLista(),need={},ser={};L.forEach(function(x){need[x.a]=1;need[x.b]=1;});var ks=Object.keys(need);
+    for(var i=0;i<ks.length;i++){EST.msg='Bajando historiales… '+(i+1)+' de '+ks.length;try{estRender();}catch(e){}
+      try{var o=await _phSerie(ks[i],getSector(ks[i]));ser[ks[i]]=(o&&o.ser)||[];}catch(e){ser[ks[i]]=[];}}
+    var out=[];L.forEach(function(x){if(!ser[x.a].length||!ser[x.b].length){out.push({p:x,err:'sin historial de '+(!ser[x.a].length?x.a:x.b)});return;}
+      var c=_parCalc(ser[x.a].slice(-760),ser[x.b].slice(-760));out.push(Object.assign({p:x},c));});
+    out.sort(function(a,b){if(!!a.err!==!!b.err)return a.err?1:-1;if(a.err)return 0;var fa=Math.abs(a.z||0)>=2&&a.r>=0.6?1:0,fb=Math.abs(b.z||0)>=2&&b.r>=0.6?1:0;return fb-fa||Math.abs(b.z||0)-Math.abs(a.z||0);});
+    EST.pares={rows:out,ts:Date.now()};EST.msg='';
+  }catch(e){EST.msg='No se pudo calcular: '+(e&&e.message||e);}
+  EST.busy='';estRender();}
+function _parHtml(th,td,inp,btn){
+  var P=EST.pares,f1=function(x,d){return x==null||!isFinite(x)?'—':(x>0?'+':x<0?'−':'')+Math.abs(x).toFixed(d==null?1:d).replace('.',',')+'%';};
+  var h=btn('Analizar pares','estPares()','par')+' <span style="font-size:.7rem;color:var(--text3)">Compara en USD cada par: correlación, qué tan separado está hoy (en desvíos) y qué pasó en el pasado cuando se separaron igual.</span>';
+  if(P){var rows=P.rows.filter(function(x){return !x.err&&x.r>=0.6;}),rest=P.rows.filter(function(x){return x.err||x.r<0.6;});
+    h+='<div style="font-size:.66rem;color:var(--text3);margin:.5rem 0">Actualizado '+new Date(P.ts).toLocaleString('es-AR')+'. Muestro solo pares con correlación de 0,6 o más; el desvío es cuántos desvíos estándar se alejó la relación entre los dos precios de su promedio de los últimos 6 meses. Con 2 o más se considera separado. Costo contado: '+_PAR_COSTO.toString().replace('.',',')+'% de comisiones.</div>';
+    h+='<div class="tw"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Par</th><th '+th+'>Correlación</th><th '+th+'>Últimas 20 ruedas</th><th '+th+'>Separación hoy</th><th '+th+'>Cuando se separó antes (a 20 ruedas)</th><th '+th+'></th></tr></thead><tbody>'+
+    rows.map(function(x){var a=x.p.a,b=x.p.b,z=x.z,sep=z!=null&&Math.abs(z)>=2,alto=z>0?a:b,bajo=z>0?b:a,bt=x.bt,v;
+      if(!sep)v='<span style="color:var(--text3)">Sin separación relevante</span>';
+      else if(bt.n<10)v='<span style="color:var(--text3)">Pocos casos ('+bt.n+') para opinar</span>';
+      else v='<b style="color:'+(bt.avgNeto>0?'var(--accent)':'var(--red)')+'">'+(bt.avgNeto>0?'✔ ':'✖ ')+'Rotar '+alto+' → '+bajo+' dejó '+f1(bt.avgNeto)+' neto</b>';
+      var hist=bt.n>=10?'<div style="font-size:.66rem;color:var(--text3);margin-top:2px">'+bt.n+' casos · volvieron a juntarse en '+Math.round(bt.conv)+'% · superaron comisiones en '+Math.round(bt.neto)+'% · prom. bruto '+f1(bt.avg)+'</div>':'';
+      return '<tr><td '+td+'><b style="font-family:var(--mono)">'+a+' / '+b+'</b>'+(x.p.c===1?' <span class="mu" style="font-size:.6rem">tuyo</span>':'')+'</td><td '+td+'>'+x.r.toFixed(2).replace('.',',')+'</td>'+
+        '<td '+td+'><span style="font-family:var(--mono);font-size:.72rem">'+a+' '+f1(x.r20a)+' · '+b+' '+f1(x.r20b)+'</span></td>'+
+        '<td '+td+'>'+(sep?'<span style="background:#e3b341;color:#0b1120;border-radius:4px;padding:0 5px;font-weight:800;font-size:.64rem">SEPARADO</span> ':'')+'<span style="font-family:var(--mono)">'+(z==null?'—':(z>0?'+':'−')+Math.abs(z).toFixed(1).replace('.',','))+'</span>'+(sep?'<div style="font-size:.66rem;color:var(--text3)">'+alto+' va de más frente a '+bajo+'</div>':'')+'</td>'+
+        '<td '+td+'>'+v+hist+'</td><td '+td+'>'+(x.p.c===1?'<button class="btn btn-sm" onclick="parQuitar('+x.p.i+')" title="Quitar">✕</button>':'')+'</td></tr>';}).join('')+'</tbody></table></div>'+
+    (rows.length?'':'<div style="font-size:.76rem;color:var(--text3);margin-top:.5rem">Ningún par llegó a 0,6 de correlación con los datos disponibles.</div>')+
+    (rest.length?'<div style="font-size:.66rem;color:var(--text3);margin-top:.5rem">Sin mostrar: '+rest.map(function(x){return x.p.a+'/'+x.p.b+(x.err?' ('+x.err+')':' ('+x.r.toFixed(2).replace('.',',')+')');}).join(' · ')+'.</div>':'');}
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:.7rem"><input id="par-a" placeholder="Ticker A" '+inp+' style="width:100px"><input id="par-b" placeholder="Ticker B" '+inp+' style="width:100px"><button class="btn btn-sm" onclick="parAgregar()">+ Agregar par</button></div>'+
+    '<div style="font-size:.66rem;color:var(--text3);margin-top:.5rem;line-height:1.5">Con Cedears no se puede vender en corto: la idea es la rotación (vender el que subió de más y comprar el que quedó atrás). Si el par se separó por resultados u otra noticia real, puede no volver a juntarse. Es historia, no una predicción.</div>';
+  return h;}
+
 function estRender(){
   var pg=document.getElementById('page-estrategia');if(!pg)return;
   if(!EST.cargado){pg.innerHTML='<div class="card"><div style="padding:1rem;color:var(--text3);font-size:.8rem">Cargando…</div></div>';estCargar().then(function(){estRender();try{valCargar();}catch(e){}});return;}
@@ -13343,6 +13407,7 @@ function estRender(){
     card('💵 ¿Dónde va el próximo aporte?','Cuánto poner en cada activo para acercarte a tu cartera ideal.',s2)+
     card('🛡 Concentración y correlación','Cuánto pesa cada activo y rubro, y qué posiciones se mueven juntas.',s3)+
     card('📍 Calidad de tus entradas','Si tendés a comprar caro dentro de su rango y cómo te fue contra el índice.',s4)+
+    card('🔀 Pares que se mueven juntos','Qué acciones se despegaron de su compañera habitual y si en el pasado volvieron a juntarse lo suficiente como para pagar las comisiones.',_parHtml(th,td,inp,btn))+
     card('🧑‍💼 Compras de directivos (insiders)','Lo que compraron y vendieron con su plata los directivos de tus activos y de tu lista.',s5)+
     '<div style="font-size:.68rem;color:var(--text3);padding:0 .3rem 1rem">Información de apoyo, no una recomendación de inversión. Ninguna señal garantiza un resultado.</div>';
 }
