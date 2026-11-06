@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2865, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2866, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2866 | 2026-11-06 | Pares: si data912 no tiene el Cedear, usa el precio en USD del activo de EE.UU. (Yahoo).',
   'v2865 | 2026-11-06 | Pares: al agregar o quitar un par ya no se borra la tabla (se recalcula sola); historial prueba también en la lista de acciones argentinas si el Cedear no tiene datos.',
   'v2864 | 2026-11-06 | El registro de errores ignora los de extensiones del navegador (ej. MetaMask).',
   'v2863 | 2026-11-05 | Pares: el motivo de "poco historial" ahora indica cuántas ruedas devolvió data912 por ticker.',
@@ -13335,11 +13336,24 @@ function _parCalc(A,B){ // A y B: [[fecha,precio],...] en USD
   var cnt=res.length,avg=cnt?res.reduce(function(s,v){return s+v;},0)/cnt:null,conv=cnt?res.filter(function(v){return v>0;}).length/cnt*100:null,neto=cnt?res.filter(function(v){return v>_PAR_COSTO;}).length/cnt*100:null;
   var r20a=pa[last]/pa[Math.max(0,last-20)]-1,r20b=pb[last]/pb[Math.max(0,last-20)]-1;
   return {r:r,z:z[last],n:n,r20a:r20a*100,r20b:r20b*100,bt:{n:cnt,avg:avg,conv:conv,neto:neto,avgNeto:avg==null?null:avg-_PAR_COSTO}};}
+// Respaldo para los pares: precio diario en USD del activo de EE.UU. (Yahoo, vía los mismos proxies públicos que ya usa la app) cuando data912 no tiene el Cedear.
+async function _parYahoo(tk){
+  var url='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(tk)+'?range=5y&interval=1d&includeAdjustedClose=true';
+  var parse=function(j){var r=j&&j.chart&&j.chart.result&&j.chart.result[0];if(!r||!r.timestamp)return Promise.reject('sin datos');
+    var cl=(r.indicators.adjclose&&r.indicators.adjclose[0]&&r.indicators.adjclose[0].adjclose)||r.indicators.quote[0].close,out=[];
+    r.timestamp.forEach(function(t,i){var v=cl[i];if(v>0)out.push([new Date(t*1000).toISOString().slice(0,10),v]);});
+    return out.length>200?out:Promise.reject('poco');};
+  var P=[fetchWithTimeout('https://api.allorigins.win/raw?url='+encodeURIComponent(url),{},12000).then(function(r){return r.ok?r.json():Promise.reject('!ok');}).then(parse),
+    fetchWithTimeout('https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(url),{},12000).then(function(r){return r.ok?r.json():Promise.reject('!ok');}).then(parse)];
+  return Promise.any(P).catch(function(){return null;});
+}
 async function estPares(){
   if(EST.busy)return;EST.busy='par';EST.msg='Bajando historiales para los pares…';estRender();
   try{var L=_parLista(),need={},ser={},fuente={};L.forEach(function(x){need[x.a]=1;need[x.b]=1;});var ks=Object.keys(need);
     for(var i=0;i<ks.length;i++){EST.msg='Bajando historiales… '+(i+1)+' de '+ks.length;try{estRender();}catch(e){}
-      try{var o=await _phSerie(ks[i],getSector(ks[i]));ser[ks[i]]=(o&&o.ser)||[];fuente[ks[i]]=(o&&o.src)||null;}catch(e){ser[ks[i]]=[];}await new Promise(function(r){setTimeout(r,350);});}
+      try{var o=await _phSerie(ks[i],getSector(ks[i]));ser[ks[i]]=(o&&o.ser)||[];fuente[ks[i]]=(o&&o.src)||null;}catch(e){ser[ks[i]]=[];}
+      if(ser[ks[i]].length<200&&['argentina','bonos','on','fci'].indexOf(getSector(ks[i]))<0){var y=await _parYahoo(ks[i]);if(y){ser[ks[i]]=y;fuente[ks[i]]={d912:'Yahoo '+y.length};}}
+      await new Promise(function(r){setTimeout(r,350);});}
     var out=[];L.forEach(function(x){if(!ser[x.a].length||!ser[x.b].length){out.push({p:x,err:'sin historial de '+(!ser[x.a].length?x.a:x.b)});return;}
       var c=_parCalc(ser[x.a].slice(-760),ser[x.b].slice(-760));if(c.err){var fa=fuente[x.a],fb=fuente[x.b];c.err+=' · data912: '+x.a+' '+(fa?fa.d912:'?')+', '+x.b+' '+(fb?fb.d912:'?')+' ruedas';}out.push(Object.assign({p:x},c));});
     out.sort(function(a,b){if(!!a.err!==!!b.err)return a.err?1:-1;if(a.err)return 0;var fa=Math.abs(a.z||0)>=2&&a.r>=0.6?1:0,fb=Math.abs(b.z||0)>=2&&b.r>=0.6?1:0;return fb-fa||Math.abs(b.z||0)-Math.abs(a.z||0);});
