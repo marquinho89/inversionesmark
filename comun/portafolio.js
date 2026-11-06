@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2864, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2865, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2865 | 2026-11-06 | Pares: al agregar o quitar un par ya no se borra la tabla (se recalcula sola); historial prueba también en la lista de acciones argentinas si el Cedear no tiene datos.',
   'v2864 | 2026-11-06 | El registro de errores ignora los de extensiones del navegador (ej. MetaMask).',
   'v2863 | 2026-11-05 | Pares: el motivo de "poco historial" ahora indica cuántas ruedas devolvió data912 por ticker.',
   'v2862 | 2026-11-05 | Pares: reintenta si data912 no responde (varios pares quedaban con 16 ruedas) y no guarda historiales incompletos.',
@@ -11212,9 +11213,11 @@ function _phSplits(ser){
 async function _phSerie(tk,s){
   if(_phSer[tk])return _phSer[tk];
   var raw={},src={d912:0,propio:0},cat=_phCat(s);
-  if(cat){for(var _t=0;_t<3&&!src.d912;_t++){if(_t)await new Promise(function(r){setTimeout(r,1200*_t);});
+  var cats=cat==='cedears'?['cedears','stocks']:[cat];
+  for(var _ci=0;cat&&_ci<cats.length&&!src.d912;_ci++){cat=cats[_ci];
+  {for(var _t=0;_t<3&&!src.d912;_t++){if(_t)await new Promise(function(r){setTimeout(r,1200*_t);});
     try{var r=await fetchWithTimeout('https://data912.com/historical/'+cat+'/'+encodeURIComponent(tk),{headers:{Accept:'application/json'}},15000);
-    if(r.ok){var a=await r.json();(Array.isArray(a)?a:[]).forEach(function(x){var c=parseFloat(x.c);if(x.date&&c>0){raw[x.date]=c;src.d912++;}});}}catch(e){}}}
+    if(r.ok){var a=await r.json();(Array.isArray(a)?a:[]).forEach(function(x){var c=parseFloat(x.c);if(x.date&&c>0){raw[x.date]=c;src.d912++;}});}}catch(e){}}}}
   try{var r2=await fetchWithTimeout(SUPABASE_URL+'/rest/v1/precios_hist?select=fecha,px:precios->>'+encodeURIComponent(String(tk).toUpperCase())+'&order=fecha.asc&limit=5000',{headers:sbHeaders()},12000);
     if(r2.ok){(await r2.json()||[]).forEach(function(x){var v=parseFloat(x.px);if(x.fecha&&v>0&&raw[x.fecha]==null){raw[x.fecha]=v;src.propio++;}});}}catch(e){}
   var usdDir=isBonoUSDDirecto(tk),fx=usdDir?{}:await _phFxLoad((s==='bonos'||s==='on')?'bolsa':'contadoconliqui');
@@ -13308,8 +13311,8 @@ var _PAR_COSTO=3.6; // % de comisiones de vender uno y comprar el otro (ida y vu
 function _parCustom(){try{return JSON.parse(localStorage.getItem(PFX+'est_pares')||'[]')||[];}catch(e){return [];}}
 function parAgregar(){var a=((document.getElementById('par-a')||{}).value||'').trim().toUpperCase(),b=((document.getElementById('par-b')||{}).value||'').trim().toUpperCase();
   if(!a||!b||a===b){EST.msg='Escribí dos tickers distintos.';estRender();return;}var L=_parCustom();if(!L.some(function(x){return x[0]===a&&x[1]===b;}))L.push([a,b]);
-  try{localStorage.setItem(PFX+'est_pares',JSON.stringify(L));}catch(e){}EST.msg='';EST.pares=null;estRender();}
-function parQuitar(i){var L=_parCustom();L.splice(i,1);try{localStorage.setItem(PFX+'est_pares',JSON.stringify(L));}catch(e){}estRender();}
+  try{localStorage.setItem(PFX+'est_pares',JSON.stringify(L));}catch(e){}EST.msg='';if(EST.pares)estPares();else estRender();}
+function parQuitar(i){var L=_parCustom();L.splice(i,1);try{localStorage.setItem(PFX+'est_pares',JSON.stringify(L));}catch(e){}if(EST.pares)estPares();else estRender();}
 function _parLista(){var L=PARES_BASE.map(function(x){return {a:x[0],b:x[1],c:0};});
   _parCustom().forEach(function(x,i){L.push({a:x[0],b:x[1],c:1,i:i});});
   // pares entre tus acciones y Cedears más grandes (por rubro parecido no se filtra: lo decide la correlación)
