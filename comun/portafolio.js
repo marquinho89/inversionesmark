@@ -3,7 +3,7 @@ var _ERR_Q=[],_ERR_N=0;
 function _errAnotar(msg,src,ctx){
   try{
     msg=String(msg||'').slice(0,300);if(!msg)return;
-    if(/^(chrome|moz|safari)(-web)?-extension:/.test(String(src||'')))return;
+    if(/(chrome|moz|safari)(-web)?-extension:/.test(String(src||''))||/MetaMask|inpage\.js/i.test(String(msg||'')+' '+String(src||'')))return;
     if(/^Script error\.?$|Failed to fetch|NetworkError|Load failed|network error|AbortError|The user aborted|ResizeObserver loop/i.test(msg))return;
     if(window._errGuardando)return;
     if(++_ERR_N>25)return;
@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2863, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2864, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2864 | 2026-11-06 | El registro de errores ignora los de extensiones del navegador (ej. MetaMask).',
   'v2863 | 2026-11-05 | Pares: el motivo de "poco historial" ahora indica cuántas ruedas devolvió data912 por ticker.',
   'v2862 | 2026-11-05 | Pares: reintenta si data912 no responde (varios pares quedaban con 16 ruedas) y no guarda historiales incompletos.',
   'v2861 | 2026-11-05 | Estrategia: panel 🔀 Pares que se mueven juntos (correlación, separación hoy y prueba hacia atrás con comisiones).',
