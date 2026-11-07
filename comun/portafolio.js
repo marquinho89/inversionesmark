@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2866, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2867, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2867 | 2026-11-07 | ⚡ Tiempo casi real: botón junto a la hora de actualización para refrescar cada 1 minuto con el mercado abierto.',
   'v2866 | 2026-11-06 | Pares: si data912 no tiene el Cedear, usa el precio en USD del activo de EE.UU. (Yahoo).',
   'v2865 | 2026-11-06 | Pares: al agregar o quitar un par ya no se borra la tabla (se recalcula sola); historial prueba también en la lista de acciones argentinas si el Cedear no tiene datos.',
   'v2864 | 2026-11-06 | El registro de errores ignora los de extensiones del navegador (ej. MetaMask).',
@@ -8518,7 +8519,9 @@ function trkCalcCCL(){
   _ifsUnaVez();
 
   // ── Auto-refresh cada 10 minutos mientras la pagina esta abierta ──
-  var AUTO_MS = 10 * 60 * 1000;
+  // ⚡ Tiempo casi real (opcional): con la rueda abierta y la pestaña a la vista, refresca cada 1 minuto en vez de cada 10.
+  function _rtLeer(){try{return localStorage.getItem('rt_on')==='1';}catch(e){return false;}}
+  var AUTO_MS = _rtLeer() ? 60*1000 : 10 * 60 * 1000;
   var _countdown = AUTO_MS / 1000;
   var _autoTimer = null;
   var _tickTimer = null;
@@ -8585,7 +8588,7 @@ function trkCalcCCL(){
       return;
     }
     _updateLabel();
-    _tickTimer = setInterval(function(){ if(_countdown > 0){ _countdown = Math.max(0, _countdown - 180); _updateLabel(); } }, 180000);
+    var _tk=Math.min(180,AUTO_MS/1000);_tickTimer = setInterval(function(){ if(_countdown > 0){ _countdown = Math.max(0, _countdown - _tk); _updateLabel(); } }, _tk*1000);
     _autoTimer = setTimeout(function(){
       clearInterval(_tickTimer);
       _refrescarCuandoSeVea();
@@ -8605,6 +8608,10 @@ function trkCalcCCL(){
     return r;
   };
 
+  window.rtToggle=function(){var on=!_rtLeer();try{localStorage.setItem('rt_on',on?'1':'0');}catch(e){}AUTO_MS=on?60*1000:10*60*1000;_rtBoton();_startCycle();if(on&&enRueda()){try{fetchAllQuotes();}catch(e){}}};
+  function _rtBoton(){var b=document.getElementById('rt-btn'),l=document.getElementById('lupd');if(!l)return;if(!b){b=document.createElement('button');b.id='rt-btn';b.className='btn btn-sm';b.style.cssText='margin-left:6px;padding:1px 7px';b.onclick=window.rtToggle;l.insertAdjacentElement('afterend',b);}
+    var on=_rtLeer();b.textContent=on?'⚡ 1 min':'⚡';b.style.opacity=on?'1':'.55';b.style.borderColor=on?'var(--accent)':'';b.title=on?'Tiempo casi real activado: actualiza cada 1 minuto con el mercado abierto. Tocá para volver a cada 10 minutos.':'Tocá para actualizar cada 1 minuto con el mercado abierto (hoy: cada 10 minutos).';}
+  setTimeout(_rtBoton,600);
   _startCycle();
 
   var _sbInitDone = false;
