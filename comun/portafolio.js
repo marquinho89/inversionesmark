@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2868, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2869, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2869 | 2026-11-07 | Laboratorio de señales (Estrategia): 7 combinaciones con criterio de aprobación fijo, calibración/verificación por fechas y neto de comisiones; avisos 🟢/🔴 en la fila y tarjeta 🚦 solo con señales aprobadas; registro hacia adelante.',
   'v2868 | 2026-11-07 | Señales técnicas: la media de 200 pasa a EMA200, se suma la WMA21 (línea violeta en el gráfico) y las divergencias alcistas/bajistas del RSI (confirmadas 5 ruedas después, sin mirar el futuro).',
   'v2867 | 2026-11-07 | ⚡ Tiempo casi real: botón junto a la hora de actualización para refrescar cada 1 minuto con el mercado abierto.',
   'v2866 | 2026-11-06 | Pares: si data912 no tiene el Cedear, usa el precio en USD del activo de EE.UU. (Yahoo).',
@@ -11678,7 +11679,7 @@ async function _stCalc(tk){
   if(kz)def.push({k:'konc',nom:'Koncorde (manos fuertes)',hoy:ok(az[last])?(az[last]>0?'Fuertes comprando ('+az[last].toFixed(0)+')':'Fuertes vendiendo ('+az[last].toFixed(0)+')'):'—',ev:[evd('Manos fuertes pasan a comprar (azul cruza sobre 0)',E.konBuy,1),evd('Manos fuertes pasan a vender (azul cruza bajo 0)',E.konSell,-1)]});
   def.push({k:'div',nom:'Divergencias (RSI)',hoy:rec(E.divBull)?'Divergencia alcista reciente':rec(E.divBear)?'Divergencia bajista reciente':'Sin divergencia reciente',ev:[evd('Divergencia alcista (precio hace mínimo más bajo, RSI más alto)',E.divBull,1),evd('Divergencia bajista (precio hace máximo más alto, RSI más bajo)',E.divBear,-1)]});
   def.forEach(function(g){g.ev.forEach(function(e){var iv=_stEv(n,e.f);e.idx=iv;e.bt=_stBack(iv,c,H);});});
-  return {def:def,base:{avg:bavg,win:bwin,n:base.length},desde:d[0],hasta:d[last],H:H,d:d,c:c,ema:ema,wma:wma,hoy:{rsi:rc(rsi),ema:ok(ema[last])?(c[last]/ema[last]-1)*100:null,wma:ok(wma[last])?(c[last]/wma[last]-1)*100:null,mUp:ok(M.sg[last])?M.m[last]>M.sg[last]:null,az:ok(az[last])?az[last]:null,konc:!!kz,dB:rec(E.divBull),dS:rec(E.divBear)}};
+  return {E:E,def:def,base:{avg:bavg,win:bwin,n:base.length},desde:d[0],hasta:d[last],H:H,d:d,c:c,ema:ema,wma:wma,hoy:{rsi:rc(rsi),ema:ok(ema[last])?(c[last]/ema[last]-1)*100:null,wma:ok(wma[last])?(c[last]/wma[last]-1)*100:null,mUp:ok(M.sg[last])?M.m[last]>M.sg[last]:null,az:ok(az[last])?az[last]:null,konc:!!kz,dB:rec(E.divBull),dS:rec(E.divBear)}};
 }
 function stCerrar(){var o=document.getElementById('st-modal');if(o){o.style.display='none';}if(window._stChart){try{window._stChart.destroy();}catch(e){}window._stChart=null;}}
 var _stR=null,_stSel='';
@@ -11750,22 +11751,121 @@ async function stAbrir(tk){
     '<div style="color:var(--text3);font-size:.68rem;margin-top:10px">Es historia de este activo, no una predicción: con pocos casos o diferencias chicas (menos de 1 punto) la señal no aporta.</div>';
   o.innerHTML=box(h);stGrafico();
 }
-// Aviso en la fila: solo cuando una señal quedó ACTIVA y en el pasado tuvo >=10 casos y se alejó >=1 punto de un día cualquiera.
-var ST_CHIP={},_stDone={},_stRunning=false;
+// Aviso en la fila: SOLO señales combinadas que pasaron el laboratorio (criterio fijo). Sin laboratorio corrido o sin aprobadas, no hay avisos.
+var ST_CHIP={},_stDone={},_stRunning=false,ST_ACT={};
+function nvSenales(){var cw=document.getElementById('nv-cards');if(!cw)return;var card=document.getElementById('nv-sig'),k=Object.keys(ST_ACT).filter(function(t){return ST_ACT[t]&&ST_ACT[t].length;});
+  if(!k.length){if(card)card.style.display='none';return;}
+  if(!card){card=document.createElement('div');card.className='card';card.id='nv-sig';}
+  var top=document.querySelector('#nv-root .nvdist');if(top&&top.parentNode){top.parentNode.insertBefore(card,top);card.style.cssText='margin:0 0 .8rem;padding:9px 14px;border-left:3px solid #e3b341';}else{cw.insertBefore(card,cw.firstChild);}
+  card.style.display='';
+  card.innerHTML='<div style="font-size:.78rem;line-height:1.9"><b>🚦 Señales validadas hoy</b> <span style="color:var(--text3);font-size:.66rem">(pasaron la prueba del laboratorio)</span><br>'+k.map(function(t){var a=ST_ACT[t],buy=a.filter(function(x){return x.r.dir>0;}).length,sell=a.length-buy;
+    return '<span class="nvchip" style="margin-right:6px;cursor:pointer" onclick="stAbrir(\''+t+'\')">'+(buy?'🟢':'')+(sell?'🔴':'')+' <b>'+t+'</b></span>';}).join('')+'</div>';}
 async function stChips(){
-  if(_stRunning||!NV_ROWS||!NV_ROWS.length)return;_stRunning=true;var cambio=false;
+  if(_stRunning||!NV_ROWS||!NV_ROWS.length||!LAB.res)return;_stRunning=true;var cambio=false;
   try{
     var T=NV_ROWS.filter(function(o){return o.rv&&!_stDone[o.t]&&_phCat(getSector(o.t));});
     for(var i=0;i<T.length;i++){var o=T[i];_stDone[o.t]=1;
-      try{var R=await _stCalc(o.t);if(R.err)continue;var ch=[];
-        R.def.forEach(function(g){g.ev.forEach(function(e){if(e.on&&e.bt.n>=10&&Math.abs(e.bt.avg-R.base.avg)>=1)ch.push({n:g.nom.split(' (')[0].replace('Koncorde','Kon.'),d:e.dir});});});
-        if(ch.length){ST_CHIP[o.t]=ch.slice(0,2).map(function(c){return '<span class="nvchip" style="padding:0 5px;margin-left:4px;font-size:.66rem;color:'+(c.d>0?'var(--accent)':'var(--red)')+'" title="Señal técnica activa (historial en el 📊 de abajo)" onclick="event.stopPropagation();stAbrir(\''+o.t+'\')">📊 '+c.n+(c.d>0?' ↑':' ↓')+'</span>';}).join('');cambio=true;}
+      try{var R=await _stCalc(o.t);if(R.err||!R.E)continue;var g=_labGrupo(o.t),n=R.c.length,act=[];
+        LAB_REGLAS.forEach(function(r){var x=LAB.res.reglas[r.id]&&LAB.res.reglas[r.id][g];if(!x||x.st!=='ok')return;var ev=_labEventos(R.E,n,r);
+          if(ev.length&&ev[ev.length-1]>=n-LAB_P.ventana){var q=ev[ev.length-1];act.push({r:r,x:x});_labLogAgregar(o.t,r.id,R.d[q],R.c[q]);}});
+        ST_ACT[o.t]=act;
+        if(act.length){var B=act.filter(function(a){return a.r.dir>0;}),V=act.filter(function(a){return a.r.dir<0;});
+          var mk=function(L,dir){if(!L.length)return '';var tip=L.map(function(a){return a.r.nom+': '+(a.x.val.m>0?'+':'')+a.x.val.m.toFixed(1).replace('.',',')+' pts vs. lo normal a 3 meses ('+a.x.val.n+' casos, verificación)';}).join(' | ');
+            return '<span class="nvchip" style="padding:0 5px;margin-left:4px;font-size:.66rem;color:'+(dir>0?'var(--accent)':'var(--red)')+'" title="Señal validada: '+tip.replace(/"/g,'')+'" onclick="event.stopPropagation();stAbrir(\''+o.t+'\')">'+(dir>0?'🟢 Compra':'🔴 Venta')+(L.length>1?' ×'+L.length:'')+'</span>';};
+          ST_CHIP[o.t]=mk(B,1)+mk(V,-1);cambio=true;}
       }catch(e){}
       await new Promise(function(r){setTimeout(r,300);});
     }
   }finally{_stRunning=false;}
+  try{nvSenales();}catch(e){}try{_labLogEvaluar();}catch(e){}
   if(cambio){try{nvRender();}catch(e){}}
 }
+
+// ─── 🧪 Laboratorio de señales: prueba combinaciones con criterio de aprobación fijado de antemano ─────────────
+// Reglas, ventana y umbrales están FIJOS (no se ajustan después de ver resultados). Solo lo que pasa la prueba se muestra como señal.
+var LAB_REGLAS=[
+  {id:'C1',dir:1,nom:'MACD fuerte + Koncorde',c:['macdBuyF','konBuy']},
+  {id:'C2',dir:1,nom:'MACD fuerte + Koncorde + WMA21',c:['macdBuyF','konBuy','wmaUp']},
+  {id:'C3',dir:1,nom:'RSI baja de 30',c:['rsiBuy']},
+  {id:'C4',dir:1,nom:'Divergencia alcista + MACD',c:['divBull','macdUp']},
+  {id:'V1',dir:-1,nom:'MACD fuerte + Koncorde',c:['macdSellF','konSell']},
+  {id:'V2',dir:-1,nom:'MACD fuerte + Koncorde + WMA21',c:['macdSellF','konSell','wmaDn']},
+  {id:'V3',dir:-1,nom:'Divergencia bajista + MACD',c:['divBear','macdDn']}];
+var LAB_P={ventana:5,sep:20,H:60,corte:'2021-12-31',costo:1.8,nMin:100,mitad:0.5,anosMin:3,anoEv:5,pctAnos:0.6};
+var LAB_AR=['GGAL','YPFD','PAMP','BMA','TXAR','ALUA','CEPU','TGSU2','LOMA','SUPV','COME','EDN','CRES','TECO2','VALO','BYMA','TRAN','MIRG','BBAR','CVH'];
+var LAB_CED=['AAPL','MSFT','GOOGL','AMZN','META','NVDA','TSLA','KO','MCD','NFLX','MELI','AMD','BABA','XOM','CVX','WMT','COST','V','MA','JPM','HD','SPY','QQQ','EWZ','IWM','PFE','MRK','JNJ','ORCL','INTC','CSCO','QCOM','BA','VIST','PLTR','DIS'];
+var LAB={res:null,busy:false,msg:'',log:[]};
+function _labLeer(){try{LAB.res=JSON.parse(localStorage.getItem(PFX+'lab_v1')||'null');}catch(e){LAB.res=null;}try{LAB.log=JSON.parse(localStorage.getItem(PFX+'lab_log')||'[]')||[];}catch(e){LAB.log=[];}}
+_labLeer();
+setTimeout(function(){try{if(!LAB.res)sbGetConfig('lab_senales').then(function(v){if(v&&v.reglas&&!LAB.res){LAB.res=v;try{localStorage.setItem(PFX+'lab_v1',JSON.stringify(v));}catch(e){}}});if(!LAB.log.length)sbGetConfig('lab_log').then(function(v){if(Array.isArray(v)&&v.length&&!LAB.log.length){LAB.log=v;try{localStorage.setItem(PFX+'lab_log',JSON.stringify(v));}catch(e){}}});}catch(e){}},5000);
+function _labGrupo(tk){return getSector(tk)==='argentina'?'ar':'ced';}
+// Eventos de una regla: el día en que todas sus señales ocurrieron dentro de una ventana de 5 ruedas (una vez por episodio, separados 20 ruedas).
+function _labEventos(E,n,r){var W=LAB_P.ventana,cond=function(i){for(var k=0;k<r.c.length;k++){var a=E[r.c[k]],ok=false;for(var q=Math.max(0,i-W+1);q<=i;q++)if(a[q]){ok=true;break;}if(!ok)return false;}return true;},out=[],last=-99,prev=false;
+  for(var i=0;i<n;i++){var c=cond(i);if(c&&!prev&&i-last>=LAB_P.sep){out.push(i);last=i;}prev=c;}return out;}
+function _labAnalizarActivo(d,c,az){
+  var M=_stMotor(c,az),n=c.length,H=LAB_P.H,res={};
+  var fwd=function(i){return i+H<n?c[i+H]/c[i]-1:null;};
+  var sc={cal:[0,0],val:[0,0]};for(var i=0;i+H<n;i++){var p=d[i]<=LAB_P.corte?'cal':'val';sc[p][0]+=fwd(i);sc[p][1]++;}
+  var bm={cal:sc.cal[1]?sc.cal[0]/sc.cal[1]:null,val:sc.val[1]?sc.val[0]/sc.val[1]:null};
+  LAB_REGLAS.forEach(function(r){var ev=_labEventos(M.E,n,r),L=[];ev.forEach(function(i){var f=fwd(i);if(f==null)return;var p=d[i]<=LAB_P.corte?'cal':'val';if(bm[p]==null)return;L.push({p:p,y:d[i].slice(0,4),x:(f-bm[p])*100*r.dir});});res[r.id]=L;});
+  return res;
+}
+function _labStats(L){var n=L.length;if(!n)return {n:0};var m=L.reduce(function(s,v){return s+v.x;},0)/n,w=L.filter(function(v){return v.x>0;}).length/n*100;return {n:n,m:m,w:w};}
+function _labVeredicto(cal,val,anos){
+  if(cal.n<LAB_P.nMin||val.n<LAB_P.nMin)return {st:'pocos',txt:'Datos insuficientes (hacen falta '+LAB_P.nMin+' casos en cada tramo)'};
+  var f=[];if(!(cal.m>0&&val.m>0))f.push('no mantuvo el signo en el tramo de verificación');
+  else if(val.m<cal.m*LAB_P.mitad)f.push('el efecto cayó a menos de la mitad');
+  if(val.m-LAB_P.costo<=0)f.push('no supera las comisiones');
+  var ys=Object.keys(anos).filter(function(y){return anos[y].n>=LAB_P.anoEv;}),pos=ys.filter(function(y){return anos[y].m>0;}).length;
+  if(ys.length<LAB_P.anosMin)f.push('pocos años con datos ('+ys.length+')');else if(pos/ys.length<LAB_P.pctAnos)f.push('solo fue positiva en '+pos+' de '+ys.length+' años');
+  return f.length?{st:'no',txt:'No pasó: '+f.join('; ')}:{st:'ok',txt:'Aprobada'};
+}
+function _labUniverso(){var m={};
+  try{estPos().L.forEach(function(o){var s=getSector(o.tk);if(['bonos','on','fci'].indexOf(s)<0)m[o.tk]=s;});}catch(e){}
+  try{estTickers().forEach(function(t){var s=getSector(t);if(['bonos','on','fci'].indexOf(s)<0)m[t]=s;});}catch(e){}
+  LAB_AR.forEach(function(t){if(!m[t])m[t]='argentina';});LAB_CED.forEach(function(t){if(!m[t])m[t]=getSector(t);});
+  return m;}
+async function labCorrer(){
+  if(LAB.busy)return;LAB.busy=true;LAB.msg='Preparando…';try{estRender();}catch(e){}
+  try{var U=_labUniverso(),T=Object.keys(U),acc={},cob={ar:{act:0,kon:0},ced:{act:0,kon:0}},hechos=0;
+    LAB_REGLAS.forEach(function(r){acc[r.id]={ar:[],ced:[]};});
+    for(var t=0;t<T.length;t++){var tk=T[t],g=U[tk]==='argentina'?'ar':'ced';LAB.msg='Analizando '+(t+1)+' de '+T.length+' · '+tk;try{estRender();}catch(e){}
+      try{var S=await _phSerie(tk,U[tk]);if(!S||!S.ser||S.ser.length<400)continue;
+        var R=await _stOhlc(tk,U[tk]),d=S.ser.map(function(x){return x[0];}),c=S.ser.map(function(x){return x[1];}),az=null,kmap={};
+        if(R.length>150){var kz=_stKonc(R);R.forEach(function(r,i){kmap[r.d]=kz.azul[i];});az=d.map(function(x){return kmap[x]!=null?kmap[x]:null;});}
+        var rs=_labAnalizarActivo(d,c,az);LAB_REGLAS.forEach(function(r){rs[r.id].forEach(function(e){acc[r.id][g].push(e);});});cob[g].act++;if(az)cob[g].kon++;hechos++;
+      }catch(e){}
+      await new Promise(function(r){setTimeout(r,250);});}
+    var out={ts:Date.now(),n:hechos,cob:cob,reglas:{}};
+    LAB_REGLAS.forEach(function(r){out.reglas[r.id]={};['ar','ced'].forEach(function(g){var L=acc[r.id][g],cal=_labStats(L.filter(function(e){return e.p==='cal';})),val=_labStats(L.filter(function(e){return e.p==='val';})),anos={};
+      L.filter(function(e){return e.p==='val';}).forEach(function(e){(anos[e.y]=anos[e.y]||[]).push(e.x);});var A={};Object.keys(anos).forEach(function(y){A[y]={n:anos[y].length,m:anos[y].reduce(function(s,v){return s+v;},0)/anos[y].length};});
+      var v=_labVeredicto(cal,val,A);out.reglas[r.id][g]={cal:cal,val:val,anos:A,st:v.st,txt:v.txt};});});
+    LAB.res=out;try{localStorage.setItem(PFX+'lab_v1',JSON.stringify(out));}catch(e){}try{sbSetConfig('lab_senales',out);}catch(e){}
+    LAB.msg='';
+    _stDone={};ST_CHIP={};
+  }catch(e){LAB.msg='No se pudo completar: '+(e&&e.message||e);}
+  LAB.busy=false;try{estRender();}catch(e){}try{nvRender();}catch(e){}}
+function _labHtml(th,td,btn){
+  var f1=function(x,d){return x==null||!isFinite(x)?'—':(x>0?'+':x<0?'−':'')+Math.abs(x).toFixed(d==null?1:d).replace('.',',')+'%';},R=LAB.res;
+  var h=(LAB.busy?'<button class="btn btn-sm" disabled>…</button>':'<button class="btn btn-sm" onclick="labCorrer()">'+(R?'Volver a correr':'Correr laboratorio')+'</button>')+' <span style="font-size:.7rem;color:var(--text3)">'+(LAB.msg||'Prueba 7 combinaciones fijas con ~60 activos. Tarda varios minutos la primera vez.')+'</span>';
+  h+='<div style="font-size:.68rem;color:var(--text3);margin:.5rem 0;line-height:1.55"><b>Reglas fijas:</b> una señal combinada cuenta cuando sus componentes aparecen dentro de '+LAB_P.ventana+' ruedas; un caso por episodio (mínimo '+LAB_P.sep+' ruedas entre casos del mismo activo); se mide el retorno a '+LAB_P.H+' ruedas contra el promedio del propio activo. Se calibra hasta 2021 y se verifica de 2022 en adelante. <b>Aprobada</b> si en la verificación: ≥'+LAB_P.nMin+' casos, mismo signo y al menos la mitad del efecto, supera '+LAB_P.costo.toString().replace('.',',')+'% de comisiones, y fue positiva en ≥'+Math.round(LAB_P.pctAnos*100)+'% de los años (mínimo '+LAB_P.anosMin+' años con ≥'+LAB_P.anoEv+' casos).</div>';
+  if(R){var ap=0,tot=0;LAB_REGLAS.forEach(function(r){['ar','ced'].forEach(function(g){tot++;if(R.reglas[r.id][g].st==='ok')ap++;});});
+    h+='<div style="font-size:.8rem;margin:.4rem 0"><b>'+ap+' de '+tot+'</b> pruebas aprobadas · '+R.n+' activos analizados · '+new Date(R.ts).toLocaleString('es-AR')+(R.cob?' · con datos de Koncorde: argentinas '+R.cob.ar.kon+'/'+R.cob.ar.act+', Cedears '+R.cob.ced.kon+'/'+R.cob.ced.act:'')+'</div>';
+    h+='<div class="tw"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Señal</th><th '+th+'>Grupo</th><th '+th+'>Calibración (hasta 2021)</th><th '+th+'>Verificación (2022 en adelante)</th><th '+th+'>Veredicto</th></tr></thead><tbody>'+
+    LAB_REGLAS.map(function(r){return ['ar','ced'].map(function(g){var x=R.reglas[r.id][g],ok=x.st==='ok';
+      var cel=function(s){return s.n?s.n+' casos · '+f1(s.m)+' · acertó '+Math.round(s.w)+'%':'sin casos';};
+      return '<tr><td '+td+'><b>'+(r.dir>0?'🟢 ':'🔴 ')+r.nom+'</b></td><td '+td+'>'+(g==='ar'?'Argentinas':'Cedears')+'</td><td '+td+'>'+cel(x.cal)+'</td><td '+td+'>'+cel(x.val)+(x.val.n?'<div style="font-size:.64rem;color:var(--text3)">neto de comisiones '+f1(x.val.m-LAB_P.costo)+'</div>':'')+'</td>'+
+        '<td '+td+'><span style="color:'+(ok?'var(--accent)':x.st==='pocos'?'var(--text3)':'var(--red)')+';font-weight:700">'+(ok?'✔ ':x.st==='pocos'?'• ':'✖ ')+x.txt+'</span></td></tr>';}).join('');}).join('')+'</tbody></table></div>';
+    h+='<div style="font-size:.66rem;color:var(--text3);margin-top:.4rem">Los efectos son puntos de retorno por encima (compra) o por debajo (venta) de lo normal del propio activo a '+LAB_P.H+' ruedas. Solo las señales aprobadas aparecen como aviso en la fila de tus acciones.</div>';}
+  // registro hacia adelante
+  var lg=LAB.log.slice().reverse().slice(0,12);
+  h+='<div style="margin-top:.9rem;font-size:.78rem"><b>📓 Registro hacia adelante</b> <span style="color:var(--text3);font-size:.68rem">cada señal aprobada que aparece se anota con su fecha; a las '+LAB_P.H+' ruedas se anota qué pasó. Las reglas no se tocan.</span></div>'+
+    (lg.length?'<div class="tw" style="margin-top:.4rem"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Fecha</th><th '+th+'>Activo</th><th '+th+'>Señal</th><th '+th+'>Resultado a '+LAB_P.H+' ruedas</th></tr></thead><tbody>'+lg.map(function(e){var r=LAB_REGLAS.filter(function(x){return x.id===e.id;})[0];return '<tr><td '+td+'>'+e.f+'</td><td '+td+'><b>'+e.tk+'</b></td><td '+td+'>'+(r?(r.dir>0?'🟢 ':'🔴 ')+r.nom:e.id)+'</td><td '+td+'>'+(e.r60!=null?'<span style="color:'+((e.r60*(r?r.dir:1))>0?'var(--accent)':'var(--red)')+'">'+f1(e.r60*100)+'</span>':'<span style="color:var(--text3)">pendiente</span>')+'</td></tr>';}).join('')+'</tbody></table></div>':'<div style="font-size:.7rem;color:var(--text3);margin-top:.3rem">Todavía no hay señales registradas.</div>');
+  return h;}
+function _labLogAgregar(tk,id,fecha,px){if(LAB.log.some(function(e){return e.tk===tk&&e.id===id&&e.f===fecha;}))return false;LAB.log.push({tk:tk,id:id,f:fecha,px:px,r60:null});try{localStorage.setItem(PFX+'lab_log',JSON.stringify(LAB.log));}catch(e){}try{sbSetConfig('lab_log',LAB.log);}catch(e){}return true;}
+async function _labLogEvaluar(){var cam=false;for(var i=0;i<LAB.log.length;i++){var e=LAB.log[i];if(e.r60!=null)continue;if((Date.now()-new Date(e.f+'T12:00:00'))/864e5<90)continue;
+  try{var S=await _phSerie(e.tk,getSector(e.tk));if(!S||!S.ser)continue;var k=-1;for(var q=0;q<S.ser.length;q++){if(S.ser[q][0]>=e.f){k=q;break;}}if(k<0||k+LAB_P.H>=S.ser.length)continue;e.r60=S.ser[k+LAB_P.H][1]/S.ser[k][1]-1;cam=true;}catch(x){}}
+  if(cam){try{localStorage.setItem(PFX+'lab_log',JSON.stringify(LAB.log));}catch(x){}try{sbSetConfig('lab_log',LAB.log);}catch(x){}}}
 
 // ─── 🌡 Termómetro · 📅 Calendario de ganancias · 🌙 Repaso nocturno (vista nueva) ─────────────
 function nvTermo(){var el=document.getElementById('nv-kt');if(!el)return;var L=NV_ROWS,n=0,v=0,cerca=0,rsiN=0,rsiA=0;
@@ -13456,6 +13556,7 @@ function estRender(){
     card('🛡 Concentración y correlación','Cuánto pesa cada activo y rubro, y qué posiciones se mueven juntas.',s3)+
     card('📍 Calidad de tus entradas','Si tendés a comprar caro dentro de su rango y cómo te fue contra el índice.',s4)+
     card('🔀 Pares que se mueven juntos','Qué acciones se despegaron de su compañera habitual y si en el pasado volvieron a juntarse lo suficiente como para pagar las comisiones.',_parHtml(th,td,inp,btn))+
+    card('🧪 Laboratorio de señales','Prueba combinaciones de indicadores con reglas fijas y un criterio de aprobación definido de antemano. Solo lo aprobado aparece como aviso en tus acciones.',_labHtml(th,td,btn))+
     card('🧑‍💼 Compras de directivos (insiders)','Lo que compraron y vendieron con su plata los directivos de tus activos y de tu lista.',s5)+
     '<div style="font-size:.68rem;color:var(--text3);padding:0 .3rem 1rem">Información de apoyo, no una recomendación de inversión. Ninguna señal garantiza un resultado.</div>';
 }
