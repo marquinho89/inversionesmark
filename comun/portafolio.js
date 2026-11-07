@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2867, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2868, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2868 | 2026-11-07 | Señales técnicas: la media de 200 pasa a EMA200, se suma la WMA21 (línea violeta en el gráfico) y las divergencias alcistas/bajistas del RSI (confirmadas 5 ruedas después, sin mirar el futuro).',
   'v2867 | 2026-11-07 | ⚡ Tiempo casi real: botón junto a la hora de actualización para refrescar cada 1 minuto con el mercado abierto.',
   'v2866 | 2026-11-06 | Pares: si data912 no tiene el Cedear, usa el precio en USD del activo de EE.UU. (Yahoo).',
   'v2865 | 2026-11-06 | Pares: al agregar o quitar un par ya no se borra la tabla (se recalcula sola); historial prueba también en la lista de acciones argentinas si el Cedear no tiene datos.',
@@ -11636,40 +11637,57 @@ function _stKonc(rows){var nvi=[1],pvi=[1];
 function _stEv(n,fn){var ev=[],last=-99;for(var i=1;i<n;i++){if(fn(i)&&!fn(i-1)&&i-last>=10){ev.push(i);last=i;}}return ev;}
 function _stBack(ev,usd,H){var rs=[];ev.forEach(function(i){if(i+H<usd.length)rs.push(usd[i+H]/usd[i]-1);});
   if(!rs.length)return {n:0};var s=0,w=0;rs.forEach(function(x){s+=x;if(x>0)w++;});return {n:rs.length,avg:s/rs.length*100,win:w/rs.length*100};}
+function _stWma(c,n){var o=[],den=n*(n+1)/2;for(var i=0;i<c.length;i++){if(i<n-1){o.push(null);continue;}var a=0;for(var k=0;k<n;k++)a+=c[i-n+1+k]*(k+1);o.push(a/den);}return o;}
+// Motor de señales: devuelve, para cada rueda, si ese día ocurrió cada evento. Se usa igual en el panel de cada activo y en el laboratorio.
+// Las divergencias se marcan el día en que el pico/valle queda confirmado (5 ruedas después), nunca antes: no usan datos del futuro.
+function _stMotor(c,az){
+  var n=c.length,rsi=_stRsi(c),ema=_stEma(c,200).map(function(v,i){return i>=199?v:null;}),wma=_stWma(c,21),mc=_stMacd(c),ok=function(v){return v!=null&&isFinite(v);};
+  var E={};['rsiBuy','rsiSell','macdUp','macdDn','macdBuyF','macdSellF','konBuy','konSell','wmaUp','wmaDn','emaUp','emaDn','divBull','divBear'].forEach(function(k){E[k]=new Array(n).fill(false);});
+  for(var i=1;i<n;i++){
+    if(ok(rsi[i])&&ok(rsi[i-1])){E.rsiBuy[i]=rsi[i]<30&&rsi[i-1]>=30;E.rsiSell[i]=rsi[i]>70&&rsi[i-1]<=70;}
+    if(ok(mc.s[i])&&ok(mc.s[i-1])){var up=mc.m[i]>mc.s[i]&&mc.m[i-1]<=mc.s[i-1],dn=mc.m[i]<mc.s[i]&&mc.m[i-1]>=mc.s[i-1];E.macdUp[i]=up;E.macdDn[i]=dn;E.macdBuyF[i]=up&&mc.m[i]<0;E.macdSellF[i]=dn&&mc.m[i]>0;}
+    if(az&&ok(az[i])&&ok(az[i-1])){E.konBuy[i]=az[i]>0&&az[i-1]<=0;E.konSell[i]=az[i]<0&&az[i-1]>=0;}
+    if(ok(wma[i])&&ok(wma[i-1])){E.wmaUp[i]=c[i]>wma[i]&&c[i-1]<=wma[i-1];E.wmaDn[i]=c[i]<wma[i]&&c[i-1]>=wma[i-1];}
+    if(ok(ema[i])&&ok(ema[i-1])){E.emaUp[i]=c[i]>ema[i]&&c[i-1]<=ema[i-1];E.emaDn[i]=c[i]<ema[i]&&c[i-1]>=ema[i-1];}
+  }
+  var W=5,pl=null,ph=null;
+  for(var k=W*2;k<n;k++){var j=k-W,lo=true,hi=true;
+    for(var q=j-W;q<=j+W;q++){if(q===j)continue;if(c[q]<c[j])lo=false;if(c[q]>c[j])hi=false;}
+    if(lo&&ok(rsi[j])){if(pl&&j-pl.j>=5&&j-pl.j<=60&&c[j]<pl.c&&rsi[j]>pl.r&&pl.r<50)E.divBull[k]=true;pl={j:j,c:c[j],r:rsi[j]};}
+    if(hi&&ok(rsi[j])){if(ph&&j-ph.j>=5&&j-ph.j<=60&&c[j]>ph.c&&rsi[j]<ph.r&&ph.r>50)E.divBear[k]=true;ph={j:j,c:c[j],r:rsi[j]};}}
+  return {E:E,rsi:rsi,ema:ema,wma:wma,m:mc.m,sg:mc.s};
+}
 async function _stCalc(tk){
   var s=getSector(tk),S=await _phSerie(tk,s),R=await _stOhlc(tk,s);
-  if(!S||!S.ser||S.ser.length<30)return {err:'Hay '+(S&&S.ser?S.ser.length:0)+' ruedas de historial y necesito al menos 30 para el RSI y el MACD (para la MM200 hacen falta ~200). Cuando junte más datos aparece solo.'};
+  if(!S||!S.ser||S.ser.length<30)return {err:'Hay '+(S&&S.ser?S.ser.length:0)+' ruedas de historial y necesito al menos 30 para el RSI y el MACD (para la EMA200 hacen falta ~210). Cuando junte más datos aparece solo.'};
   var d=S.ser.map(function(x){return x[0];}),c=S.ser.map(function(x){return x[1];}),n=c.length,H=20;
-  var rsi=_stRsi(c),ma=_stSma(c,200),mc=_stMacd(c),kz=null,kmap={};
+  var kz=null,kmap={};
   if(R.length>150&&n>=150){kz=_stKonc(R);R.forEach(function(r,i){kmap[r.d]=kz.azul[i];});}
   var az=d.map(function(x){return kmap[x]!=null?kmap[x]:null;});
-  var ok=function(v){return v!=null;};
+  var M=_stMotor(c,kz?az:null),E=M.E,rsi=M.rsi,ema=M.ema,wma=M.wma,ok=function(v){return v!=null&&isFinite(v);};
   var base=[];for(var i=0;i+H<n;i++)base.push(c[i+H]/c[i]-1);var bavg=base.length?base.reduce(function(a,b){return a+b;},0)/base.length*100:0,bwin=base.length?base.filter(function(x){return x>0;}).length/base.length*100:0;
   var last=n-1,rc=function(a){return ok(a[last])?a[last]:null;};
+  var rec=function(a){for(var q=Math.max(0,n-5);q<n;q++)if(a[q])return true;return false;};
+  var evd=function(t,a,dir){return {t:t,f:function(i){return a[i];},on:rec(a),dir:dir,evArr:a};};
   var def=[
-   {k:'rsi',nom:'RSI (14)',hoy:rc(rsi)!=null?rc(rsi).toFixed(0):'—',
-    ev:[{t:'Sobreventa (RSI cruza bajo 30)',f:function(i){return ok(rsi[i])&&rsi[i]<30;},on:rc(rsi)!=null&&rc(rsi)<30,dir:1},
-        {t:'Sobrecompra (RSI cruza sobre 70)',f:function(i){return ok(rsi[i])&&rsi[i]>70;},on:rc(rsi)!=null&&rc(rsi)>70,dir:-1}]},
-   n<210?null:{k:'mm',nom:'Media 200 ruedas',hoy:ok(ma[last])?(c[last]>ma[last]?'+':'')+((c[last]/ma[last]-1)*100).toFixed(1).replace('.',',')+'% vs MM200':'—',
-    ev:[{t:'Precio cruza hacia arriba la MM200',f:function(i){return ok(ma[i])&&c[i]>ma[i];},on:ok(ma[last])&&c[last]>ma[last]&&c.slice(-10).some(function(x,j){var q=n-10+j;return ok(ma[q])&&x<=ma[q];}),dir:1},
-        {t:'Precio cruza hacia abajo la MM200',f:function(i){return ok(ma[i])&&c[i]<ma[i];},on:ok(ma[last])&&c[last]<ma[last]&&c.slice(-10).some(function(x,j){var q=n-10+j;return ok(ma[q])&&x>=ma[q];}),dir:-1}]},
-   {k:'macd',nom:'MACD (12,26,9)',hoy:ok(mc.m[last])&&ok(mc.s[last])?(mc.m[last]>mc.s[last]?'MACD sobre su señal':'MACD bajo su señal'):'—',
-    ev:[{t:'MACD cruza hacia arriba su señal',f:function(i){return ok(mc.s[i])&&mc.m[i]>mc.s[i];},on:ok(mc.s[last])&&mc.m[last]>mc.s[last]&&mc.m[last-6]<=mc.s[last-6],dir:1},
-        {t:'MACD cruza hacia abajo su señal',f:function(i){return ok(mc.s[i])&&mc.m[i]<mc.s[i];},on:ok(mc.s[last])&&mc.m[last]<mc.s[last]&&mc.m[last-6]>=mc.s[last-6],dir:-1}]}
-  ];
-  def=def.filter(Boolean);
-  if(kz)def.push({k:'konc',nom:'Koncorde (manos fuertes)',hoy:ok(az[last])?(az[last]>0?'Fuertes comprando ('+az[last].toFixed(0)+')':'Fuertes vendiendo ('+az[last].toFixed(0)+')'):'—',
-    ev:[{t:'Manos fuertes pasan a comprar (azul cruza sobre 0)',f:function(i){return ok(az[i])&&az[i]>0;},on:ok(az[last])&&az[last]>0&&az.slice(-6,-1).some(function(x){return ok(x)&&x<=0;}),dir:1},
-        {t:'Manos fuertes pasan a vender (azul cruza bajo 0)',f:function(i){return ok(az[i])&&az[i]<0;},on:ok(az[last])&&az[last]<0&&az.slice(-6,-1).some(function(x){return ok(x)&&x>=0;}),dir:-1}]});
+   {k:'rsi',nom:'RSI (14)',hoy:rc(rsi)!=null?rc(rsi).toFixed(0):'—',ev:[evd('Sobreventa (RSI cruza bajo 30)',E.rsiBuy,1),evd('Sobrecompra (RSI cruza sobre 70)',E.rsiSell,-1)]},
+   n<210?null:{k:'ema',nom:'EMA200',hoy:ok(ema[last])?(c[last]>ema[last]?'EMA200 ▲ ':'EMA200 ▼ ')+(c[last]>ema[last]?'+':'')+((c[last]/ema[last]-1)*100).toFixed(1).replace('.',',')+'%':'—',ev:[evd('Precio cruza hacia arriba la EMA200',E.emaUp,1),evd('Precio cruza hacia abajo la EMA200',E.emaDn,-1)]},
+   {k:'wma',nom:'WMA21',hoy:ok(wma[last])?(c[last]>wma[last]?'Precio sobre la WMA21':'Precio bajo la WMA21'):'—',ev:[evd('Precio cruza hacia arriba la WMA21',E.wmaUp,1),evd('Precio cruza hacia abajo la WMA21',E.wmaDn,-1)]},
+   {k:'macd',nom:'MACD (12,26,9)',hoy:ok(M.m[last])&&ok(M.sg[last])?(M.m[last]>M.sg[last]?'MACD sobre su señal':'MACD bajo su señal'):'—',ev:[evd('MACD cruza hacia arriba su señal',E.macdUp,1),evd('MACD cruza hacia abajo su señal',E.macdDn,-1)]}
+  ].filter(Boolean);
+  if(kz)def.push({k:'konc',nom:'Koncorde (manos fuertes)',hoy:ok(az[last])?(az[last]>0?'Fuertes comprando ('+az[last].toFixed(0)+')':'Fuertes vendiendo ('+az[last].toFixed(0)+')'):'—',ev:[evd('Manos fuertes pasan a comprar (azul cruza sobre 0)',E.konBuy,1),evd('Manos fuertes pasan a vender (azul cruza bajo 0)',E.konSell,-1)]});
+  def.push({k:'div',nom:'Divergencias (RSI)',hoy:rec(E.divBull)?'Divergencia alcista reciente':rec(E.divBear)?'Divergencia bajista reciente':'Sin divergencia reciente',ev:[evd('Divergencia alcista (precio hace mínimo más bajo, RSI más alto)',E.divBull,1),evd('Divergencia bajista (precio hace máximo más alto, RSI más bajo)',E.divBear,-1)]});
   def.forEach(function(g){g.ev.forEach(function(e){var iv=_stEv(n,e.f);e.idx=iv;e.bt=_stBack(iv,c,H);});});
-  return {def:def,base:{avg:bavg,win:bwin,n:base.length},desde:d[0],hasta:d[last],H:H,d:d,c:c,ma:ma,hoy:{rsi:rc(rsi),mm:ok(ma[last])?(c[last]/ma[last]-1)*100:null,mUp:ok(mc.s[last])?mc.m[last]>mc.s[last]:null,az:ok(az[last])?az[last]:null,konc:!!kz}};
+  return {def:def,base:{avg:bavg,win:bwin,n:base.length},desde:d[0],hasta:d[last],H:H,d:d,c:c,ema:ema,wma:wma,hoy:{rsi:rc(rsi),ema:ok(ema[last])?(c[last]/ema[last]-1)*100:null,wma:ok(wma[last])?(c[last]/wma[last]-1)*100:null,mUp:ok(M.sg[last])?M.m[last]>M.sg[last]:null,az:ok(az[last])?az[last]:null,konc:!!kz,dB:rec(E.divBull),dS:rec(E.divBear)}};
 }
 function stCerrar(){var o=document.getElementById('st-modal');if(o){o.style.display='none';}if(window._stChart){try{window._stChart.destroy();}catch(e){}window._stChart=null;}}
 var _stR=null,_stSel='';
 var _stAyuda={rsi:'RSI: mide qué tan rápido subió o bajó el precio en las últimas 14 ruedas. Menos de 30 = cayó mucho (sobreventa); más de 70 = subió mucho (sobrecompra).',
- mm:'Media de 200 ruedas: el precio promedio de los últimos ~10 meses. Si el precio está arriba, la tendencia larga es alcista; abajo, bajista.',
+ ema:'EMA200: media exponencial de 200 ruedas (da más peso a lo reciente que una media común). Precio por encima = tendencia larga alcista; por debajo, bajista.',
+ wma:'WMA21: media ponderada de 21 ruedas (más peso a los últimos días). Cuando el precio la cruza hacia arriba suele marcar una mejora de corto plazo; hacia abajo, un deterioro.',
  macd:'MACD: compara una media rápida con una lenta. Cuando la rápida cruza hacia arriba a su "señal", suele indicar que la suba toma fuerza; hacia abajo, que la pierde.',
- konc:'Koncorde (simplificado): usa el volumen para estimar si los jugadores grandes ("manos fuertes") están comprando o vendiendo. Azul sobre 0 = comprando.'};
+ konc:'Koncorde (simplificado): usa el volumen para estimar si los jugadores grandes ("manos fuertes") están comprando o vendiendo. Azul sobre 0 = comprando.',
+ div:'Divergencia: el precio hace un nuevo mínimo pero el RSI no (alcista: la caída pierde fuerza), o hace un nuevo máximo pero el RSI no (bajista). Se marca 5 ruedas después del pico, cuando ya está confirmado.'};
 function _stVer(e,dir,base){var b=e.bt;if(b.n<10)return {t:'Pocos casos ('+b.n+')',c:'var(--text3)',i:'•'};var dif=b.avg-base.avg;
   if(Math.abs(dif)<1)return {t:'Da igual: no cambia nada frente a un día cualquiera',c:'var(--text3)',i:'–'};
   var ok=dir>0?dif>0:dif<0;return {t:ok?'Funcionó: '+(dir>0?'subió más':'cayó más')+' que un día normal':'No funcionó: '+(dir>0?'rindió peor':'rindió mejor')+' que un día normal',c:ok?'var(--accent)':'var(--red)',i:ok?'✔':'✖'};}
@@ -11682,7 +11700,7 @@ function stGrafico(){
   if(g)g.ev.forEach(function(e){(e.idx||[]).forEach(function(i){if(i>=o0){(e.dir>0?up:dn)[i-o0]=R.c[i];}});});
   var css=getComputedStyle(document.documentElement),ac=css.getPropertyValue('--accent').trim()||'#00e676',rd=css.getPropertyValue('--red').trim()||'#ff5252';
   var ds=[{label:'Precio (USD)',data:R.c.slice(o0),borderColor:'#7aa2ff',borderWidth:1.5,pointRadius:0,tension:.1},
-    {label:'MM200',data:R.ma.slice(o0),borderColor:'#e3b341',borderWidth:1,borderDash:[4,3],pointRadius:0,hidden:_stSel!=='mm'&&false},
+    {label:'EMA200',data:R.ema.slice(o0),borderColor:'#e3b341',borderWidth:1,borderDash:[4,3],pointRadius:0},{label:'WMA21',data:R.wma.slice(o0),borderColor:'#a78bfa',borderWidth:1,pointRadius:0},
     {label:'Señal de entrada',data:up,showLine:false,pointStyle:'triangle',pointRadius:7,backgroundColor:ac,borderColor:ac},
     {label:'Señal de salida',data:dn,showLine:false,pointStyle:'triangle',pointRadius:7,rotation:180,backgroundColor:rd,borderColor:rd}];
   window._stChart=new Chart(cv,{type:'line',data:{labels:lab,datasets:ds},options:{responsive:true,maintainAspectRatio:false,spanGaps:false,interaction:{mode:'index',intersect:false},
@@ -11708,13 +11726,15 @@ async function stAbrir(tk){
   var H=R.hoy,cel=function(t,body){return '<div style="flex:1;min-width:150px;padding:8px 10px;border:1px solid var(--border);border-radius:10px"><div style="font-size:.64rem;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">'+t+'</div>'+body+'</div>';};
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">';
   if(H.rsi!=null)h+=cel('RSI (14)','<div style="'+mono+';font-size:1.05rem;font-weight:700">'+H.rsi.toFixed(0)+'</div><div style="position:relative;height:8px;border-radius:4px;margin-top:5px;background:linear-gradient(90deg,rgba(0,230,118,.55) 0 30%,rgba(122,156,197,.25) 30% 70%,rgba(255,82,82,.55) 70% 100%)"><div style="position:absolute;left:calc('+Math.max(0,Math.min(100,H.rsi))+'% - 2px);top:-3px;width:4px;height:14px;background:var(--text);border-radius:2px"></div></div><div style="display:flex;justify-content:space-between;font-size:.58rem;color:var(--text3);margin-top:2px"><span>sobreventa</span><span>sobrecompra</span></div>');
-  if(H.mm!=null)h+=cel('Vs. media 200 ruedas','<div style="'+mono+';font-size:1.05rem;font-weight:700;color:'+(H.mm>=0?'var(--accent)':'var(--red)')+'">'+(H.mm>=0?'▲ ':'▼ ')+f1(H.mm)+'</div><div style="font-size:.7rem;color:var(--text2);margin-top:5px">'+(H.mm>=0?'Precio por encima: tendencia larga alcista':'Precio por debajo: tendencia larga bajista')+'</div>');
+  if(H.ema!=null)h+=cel('EMA200','<div style="'+mono+';font-size:1.05rem;font-weight:700;color:'+(H.ema>=0?'var(--accent)':'var(--red)')+'">EMA200 '+(H.ema>=0?'▲ ':'▼ ')+f1(H.ema)+'</div><div style="font-size:.7rem;color:var(--text2);margin-top:5px">'+(H.ema>=0?'Precio por encima: tendencia larga alcista':'Precio por debajo: tendencia larga bajista')+'</div>');
+  if(H.wma!=null)h+=cel('WMA21','<div style="'+mono+';font-size:1.05rem;font-weight:700;color:'+(H.wma>=0?'var(--accent)':'var(--red)')+'">'+(H.wma>=0?'▲ ':'▼ ')+f1(H.wma)+'</div><div style="font-size:.7rem;color:var(--text2);margin-top:5px">'+(H.wma>=0?'Precio sobre su media corta':'Precio bajo su media corta')+'</div>');
   if(H.mUp!=null)h+=cel('MACD','<div style="'+mono+';font-size:1.05rem;font-weight:700;color:'+(H.mUp?'var(--accent)':'var(--red)')+'">'+(H.mUp?'↗ Con fuerza':'↘ Pierde fuerza')+'</div><div style="font-size:.7rem;color:var(--text2);margin-top:5px">'+(H.mUp?'Sobre su línea de señal':'Bajo su línea de señal')+'</div>');
   if(H.az!=null)h+=cel('Koncorde','<div style="'+mono+';font-size:1.05rem;font-weight:700;color:'+(H.az>0?'var(--accent)':'var(--red)')+'">'+(H.az>0?'▲ Fuertes comprando':'▼ Fuertes vendiendo')+'</div><div style="font-size:.7rem;color:var(--text2);margin-top:5px">Azul '+H.az.toFixed(0)+' (0 es el cambio)</div>');
+  h+=cel('Divergencia (RSI)','<div style="'+mono+';font-size:.95rem;font-weight:700;color:'+(H.dB?'var(--accent)':H.dS?'var(--red)':'var(--text3)')+'">'+(H.dB?'↗ Alcista reciente':H.dS?'↘ Bajista reciente':'Ninguna reciente')+'</div><div style="font-size:.7rem;color:var(--text2);margin-top:5px">Últimas 5 ruedas</div>');
   h+='</div>';
   // 3) Gráfico con selector
   var sel=_stSel&&R.def.some(function(x){return x.k===_stSel;})?_stSel:(act[0]?act[0].g.k:'macd');if(!R.def.some(function(x){return x.k===sel;}))sel=R.def[0].k;_stSel=sel;
-  h+='<div style="margin-top:12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:.72rem;color:var(--text3)">Ver cruces de:</span>'+R.def.map(function(x){return '<button class="btn btn-sm" data-sk="'+x.k+'" style="padding:2px 9px;opacity:'+(x.k===sel?1:.45)+'" onclick="stSel(\''+x.k+'\')">'+x.nom.split(' (')[0].replace('Media 200 ruedas','MM200')+'</button>';}).join('')+'<span style="font-size:.66rem;color:var(--text3);margin-left:auto">▲ entrada · <span style="display:inline-block;transform:rotate(180deg)">▲</span> salida</span></div>'+
+  h+='<div style="margin-top:12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:.72rem;color:var(--text3)">Ver cruces de:</span>'+R.def.map(function(x){return '<button class="btn btn-sm" data-sk="'+x.k+'" style="padding:2px 9px;opacity:'+(x.k===sel?1:.45)+'" onclick="stSel(\''+x.k+'\')">'+x.nom.split(' (')[0]+'</button>';}).join('')+'<span style="font-size:.66rem;color:var(--text3);margin-left:auto">▲ entrada · <span style="display:inline-block;transform:rotate(180deg)">▲</span> salida</span></div>'+
     '<div style="position:relative;height:210px;margin-top:6px"><canvas id="st-cv"></canvas></div>';
   // 4) Tarjetas: entradas / salidas, activas primero
   h+='<div style="font-size:.74rem;color:var(--text3);margin:12px 0 6px">Cada tarjeta dice cuántas veces dio esa señal y qué pasó <b>20 ruedas después</b>. Referencia: un día cualquiera rindió <b>'+f1(R.base.avg)+'</b> y subió el <b>'+Math.round(R.base.win)+'%</b> de las veces. Historial en USD de '+R.desde+' a '+R.hasta+'.</div>';
@@ -11726,7 +11746,7 @@ async function stAbrir(tk){
         '<div style="color:'+v.c+';font-weight:700">'+v.i+' '+v.t+'</div>'+(b.n>=10?'<div style="'+mono+';font-size:.7rem;color:var(--text2);margin-top:4px">'+b.n+' casos · prom. '+f1(b.avg)+' · subió '+Math.round(b.win)+'%</div>':'')+'</div>';}).join('')+'</div>';
   });
   // 5) Ayuda
-  h+='<details style="margin-top:12px;font-size:.74rem;color:var(--text2)"><summary style="cursor:pointer;color:var(--text3)">❓ ¿Qué es cada indicador?</summary><div style="margin-top:6px;line-height:1.5">'+['rsi','mm','macd','konc'].map(function(k){return '<div style="margin-bottom:4px">'+_stAyuda[k]+'</div>';}).join('')+'</div></details>'+
+  h+='<details style="margin-top:12px;font-size:.74rem;color:var(--text2)"><summary style="cursor:pointer;color:var(--text3)">❓ ¿Qué es cada indicador?</summary><div style="margin-top:6px;line-height:1.5">'+['rsi','ema','wma','macd','konc','div'].map(function(k){return '<div style="margin-bottom:4px">'+_stAyuda[k]+'</div>';}).join('')+'</div></details>'+
     '<div style="color:var(--text3);font-size:.68rem;margin-top:10px">Es historia de este activo, no una predicción: con pocos casos o diferencias chicas (menos de 1 punto) la señal no aporta.</div>';
   o.innerHTML=box(h);stGrafico();
 }
@@ -11738,7 +11758,7 @@ async function stChips(){
     var T=NV_ROWS.filter(function(o){return o.rv&&!_stDone[o.t]&&_phCat(getSector(o.t));});
     for(var i=0;i<T.length;i++){var o=T[i];_stDone[o.t]=1;
       try{var R=await _stCalc(o.t);if(R.err)continue;var ch=[];
-        R.def.forEach(function(g){g.ev.forEach(function(e){if(e.on&&e.bt.n>=10&&Math.abs(e.bt.avg-R.base.avg)>=1)ch.push({n:g.k==='rsi'?'RSI':g.k==='mm'?'MM200':g.k==='macd'?'MACD':'Koncorde',d:e.dir});});});
+        R.def.forEach(function(g){g.ev.forEach(function(e){if(e.on&&e.bt.n>=10&&Math.abs(e.bt.avg-R.base.avg)>=1)ch.push({n:g.nom.split(' (')[0].replace('Koncorde','Kon.'),d:e.dir});});});
         if(ch.length){ST_CHIP[o.t]=ch.slice(0,2).map(function(c){return '<span class="nvchip" style="padding:0 5px;margin-left:4px;font-size:.66rem;color:'+(c.d>0?'var(--accent)':'var(--red)')+'" title="Señal técnica activa (historial en el 📊 de abajo)" onclick="event.stopPropagation();stAbrir(\''+o.t+'\')">📊 '+c.n+(c.d>0?' ↑':' ↓')+'</span>';}).join('');cambio=true;}
       }catch(e){}
       await new Promise(function(r){setTimeout(r,300);});
