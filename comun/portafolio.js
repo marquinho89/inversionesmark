@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2870, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2871, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2871 | 2026-11-10 | Nueva página 💸 Gastos: carga rápida (monto + categoría), resumen por mes y categoría, dónde te desviás de tu promedio y detector de gasto hormiga. Cada perfil con sus gastos.',
   'v2870 | 2026-11-10 | Laboratorio: prueba de robustez (casos agrupados por mes), nivel de evidencia fuerte/moderada/débil en los avisos, ⚖ señales contradictorias y universo de Cedears ampliado (los 150 más operados). Hay que volver a correr el laboratorio.',
   'v2869 | 2026-11-07 | Laboratorio de señales (Estrategia): 7 combinaciones con criterio de aprobación fijo, calibración/verificación por fechas y neto de comisiones; avisos 🟢/🔴 en la fila y tarjeta 🚦 solo con señales aprobadas; registro hacia adelante.',
   'v2868 | 2026-11-07 | Señales técnicas: la media de 200 pasa a EMA200, se suma la WMA21 (línea violeta en el gráfico) y las divergencias alcistas/bajistas del RSI (confirmadas 5 ruedas después, sin mirar el futuro).',
@@ -1792,6 +1793,7 @@ function showPage(id,btn){
   if(id==='rotaciones') rotRender();
   if(id==='balances') balRender();
   if(id==='estrategia') estRender();
+  if(id==='gastos') gsRender();
   if(id==='grandes') gfRender();
   if(id==='diario') diaRender();
   if(id==='noticias') nwsLoad(false);
@@ -11882,6 +11884,104 @@ function _labLogAgregar(tk,id,fecha,px){if(LAB.log.some(function(e){return e.tk=
 async function _labLogEvaluar(){var cam=false;for(var i=0;i<LAB.log.length;i++){var e=LAB.log[i];if(e.r60!=null)continue;if((Date.now()-new Date(e.f+'T12:00:00'))/864e5<90)continue;
   try{var S=await _phSerie(e.tk,getSector(e.tk));if(!S||!S.ser)continue;var k=-1;for(var q=0;q<S.ser.length;q++){if(S.ser[q][0]>=e.f){k=q;break;}}if(k<0||k+LAB_P.H>=S.ser.length)continue;e.r60=S.ser[k+LAB_P.H][1]/S.ser[k][1]-1;cam=true;}catch(x){}}
   if(cam){try{localStorage.setItem(PFX+'lab_log',JSON.stringify(LAB.log));}catch(x){}try{sbSetConfig('lab_log',LAB.log);}catch(x){}}}
+
+// ─── 💸 Gastos: registro diario rápido, resumen por categoría y mes, y detector de gasto hormiga ─────────────
+// Cada perfil tiene sus gastos. Se guardan por mes en config ("gastos_AAAA-MM") y la configuración en "gastos_cfg". Todo en pesos.
+var GS={cfg:null,mes:'',docs:{},cargado:false,msg:'',cat:'',busy:false,nuevaCat:''};
+var GS_CATS=['Comida','Supermercado','Delivery','Transporte','Salud','Servicios','Suscripciones','Salidas','Ropa','Hogar','Educación','Otros'];
+function _gsHoy(){var d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,10);}
+function _gsMesMas(m,k){var y=+m.slice(0,4),n=+m.slice(5,7)-1+k;y+=Math.floor(n/12);n=((n%12)+12)%12;return y+'-'+String(n+1).padStart(2,'0');}
+function _gsMesTxt(m){var N=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];return N[+m.slice(5,7)-1]+' '+m.slice(0,4);}
+function _gsMesCorto(m){var N=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return N[+m.slice(5,7)-1]+' '+m.slice(2,4);}
+function _gsFmt(v){return '$ '+Math.round(v||0).toLocaleString('es-AR');}
+function _gsEsc(x){return String(x==null?'':x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function _gsNum(t){var s=String(t||'').replace(/[\s$]/g,'');if(!s)return NaN;if(s.indexOf(',')>=0)s=s.replace(/\./g,'').replace(',','.');else if(/^\d{1,3}(\.\d{3})+$/.test(s))s=s.replace(/\./g,'');return parseFloat(s);}
+async function gsCargarCfg(){var c=null;try{c=await sbGetConfig('gastos_cfg');}catch(e){}if(!c){try{c=JSON.parse(localStorage.getItem(PFX+'gs_cfg')||'null');}catch(e){}}
+  GS.cfg=(c&&typeof c==='object')?c:{};if(!Array.isArray(GS.cfg.cats)||!GS.cfg.cats.length)GS.cfg.cats=GS_CATS.slice();if(!(GS.cfg.umbral>0))GS.cfg.umbral=6000;if(!(GS.cfg.veces>0))GS.cfg.veces=4;}
+async function gsGuardarCfg(){try{localStorage.setItem(PFX+'gs_cfg',JSON.stringify(GS.cfg));}catch(e){}try{var ok=await sbSetConfig('gastos_cfg',GS.cfg);if(!ok)GS.msg='No se pudo guardar la configuración en la nube; quedó en este dispositivo.';}catch(e){}}
+async function gsCargarMes(m){if(GS.docs[m])return;var d=null;try{d=await sbGetConfig('gastos_'+m);}catch(e){}
+  if(!d){try{d=JSON.parse(localStorage.getItem(PFX+'gs_'+m)||'null');}catch(e){}}
+  GS.docs[m]=(d&&Array.isArray(d.items))?d:{items:[]};}
+async function gsGuardarMes(m){try{localStorage.setItem(PFX+'gs_'+m,JSON.stringify(GS.docs[m]));}catch(e){}
+  try{var ok=await sbSetConfig('gastos_'+m,GS.docs[m]);if(!ok){GS.msg='⚠ No se pudo guardar en la nube; quedó en este dispositivo. Probá de nuevo más tarde.';return false;}return true;}catch(e){GS.msg='⚠ No se pudo guardar en la nube.';return false;}}
+async function gsAgregar(){
+  var mo=_gsNum((document.getElementById('gs-monto')||{}).value),nota=((document.getElementById('gs-nota')||{}).value||'').trim().slice(0,60),f=((document.getElementById('gs-fecha')||{}).value||_gsHoy());
+  if(!(mo>0)){GS.msg='Escribí un monto mayor a cero.';gsRender();return;}if(!GS.cat){GS.msg='Elegí una categoría.';gsRender();return;}
+  var m=f.slice(0,7);await gsCargarMes(m);GS.docs[m].items.push({id:Date.now().toString(36)+Math.floor(Math.random()*1e3).toString(36),f:f,m:mo,c:GS.cat,n:nota});
+  try{localStorage.setItem(PFX+'gs_ultcat',GS.cat);}catch(e){}
+  var ok=await gsGuardarMes(m);if(ok)GS.msg='✔ '+_gsFmt(mo)+' en '+GS.cat+(nota?' ('+nota+')':'');GS.fechaKeep=f!==_gsHoy()?f:'';['gs-monto','gs-nota'].forEach(function(i){var e=document.getElementById(i);if(e)e.value='';});gsRender(true);}
+async function gsBorrar(m,id){if(!GS.docs[m])return;GS.docs[m].items=GS.docs[m].items.filter(function(x){return x.id!==id;});await gsGuardarMes(m);GS.msg='Gasto borrado.';gsRender();}
+function gsCat(c){GS.cat=c;gsRender(true);}
+function gsMes(k){GS.mes=_gsMesMas(GS.mes,k);GS.msg='';gsRender();}
+function gsUmbral(v){var n=_gsNum(v);if(n>0){GS.cfg.umbral=n;gsGuardarCfg();gsRender();}}
+function gsVeces(v){var n=parseInt(v,10);if(n>=2&&n<=31){GS.cfg.veces=n;gsGuardarCfg();gsRender();}}
+function gsNuevaCat(){var c=((document.getElementById('gs-newcat')||{}).value||'').trim().slice(0,24);if(!c||GS.cfg.cats.indexOf(c)>=0)return;GS.cfg.cats.push(c);gsGuardarCfg();gsRender();}
+function gsQuitarCat(c){if(GS.cfg.cats.length<=1)return;GS.cfg.cats=GS.cfg.cats.filter(function(x){return x!==c;});if(GS.cat===c)GS.cat='';gsGuardarCfg();gsRender();}
+function _gsItems(m){return (GS.docs[m]&&GS.docs[m].items)||[];}
+function _gsPorCat(m){var o={};_gsItems(m).forEach(function(x){o[x.c]=(o[x.c]||0)+x.m;});return o;}
+function _gsTotal(m){return _gsItems(m).reduce(function(s,x){return s+x.m;},0);}
+function _gsHormiga(m){var U=GS.cfg.umbral,g={},chicos=0;_gsItems(m).forEach(function(x){if(x.m>U)return;chicos+=x.m;var k=(x.n||x.c).toLowerCase().trim();(g[k]=g[k]||{k:x.n||x.c,cat:x.c,n:0,t:0});g[k].n++;g[k].t+=x.m;});
+  var rep=Object.keys(g).map(function(k){return g[k];}).filter(function(x){return x.n>=GS.cfg.veces;}).sort(function(a,b){return b.t-a.t;});
+  return {rep:rep,tot:rep.reduce(function(s,x){return s+x.t;},0),chicos:chicos};}
+async function gsRender(foco){
+  var pg=document.getElementById('page-gastos');if(!pg)return;
+  if(!GS.cargado){pg.innerHTML='<div class="card"><div style="padding:1rem;color:var(--text3);font-size:.8rem">Cargando…</div></div>';
+    await gsCargarCfg();GS.mes=_gsHoy().slice(0,7);var ul='';try{ul=localStorage.getItem(PFX+'gs_ultcat')||'';}catch(e){}if(ul&&GS.cfg.cats.indexOf(ul)>=0)GS.cat=ul;GS.cargado=true;}
+  var meses=[];for(var k=-5;k<=0;k++)meses.push(_gsMesMas(GS.mes,k));
+  var faltan=meses.filter(function(m){return !GS.docs[m];});
+  if(faltan.length){await Promise.all(faltan.map(gsCargarMes));}
+  var thS='text-align:left;padding:6px 8px;font-size:.62rem;color:var(--text3);font-weight:600;border-bottom:1px solid var(--border)',tdS='padding:6px 8px;border-bottom:1px solid var(--border);font-size:.76rem',
+    inpS='background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text);padding:8px 10px;font-size:.9rem',
+    th='style="'+thS+'"',td='style="'+tdS+'"',inp='style="'+inpS+'"';
+  var card=function(t,sub,body){return '<div class="card" style="margin-bottom:1rem"><div class="card-header"><span class="card-title">'+t+'</span></div><div style="padding:.2rem .8rem .8rem">'+(sub?'<div style="font-size:.7rem;color:var(--text3);padding:.2rem 0 .6rem">'+sub+'</div>':'')+body+'</div></div>';};
+  var hoy=_gsHoy(),M=GS.mes,esActual=M===hoy.slice(0,7),tot=_gsTotal(M),dHoy=+hoy.slice(8,10),ant=esActual?_gsItems(_gsMesMas(M,-1)).filter(function(x){return +x.f.slice(8,10)<=dHoy;}).reduce(function(q,x){return q+x.m;},0):_gsTotal(_gsMesMas(M,-1)),pc=_gsPorCat(M);
+  // 1) Carga rápida
+  var chips=GS.cfg.cats.map(function(c){var on=GS.cat===c;return '<button class="btn btn-sm" style="padding:5px 11px;font-size:.8rem;'+(on?'border-color:var(--accent);color:var(--accent);font-weight:700;background:rgba(0,230,118,.1)':'opacity:.8')+'" onclick="gsCat(\''+_gsEsc(c).replace(/'/g,"\\'")+'\')">'+_gsEsc(c)+'</button>';}).join(' ');
+  var h=card('⚡ Carga rápida','Monto, categoría y listo. La fecha es hoy salvo que la cambies.',
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input id="gs-monto" type="text" inputmode="decimal" placeholder="Monto $" style="'+inpS+';width:130px;font-size:1.1rem;font-weight:700;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text);padding:8px 10px" onkeydown="if(event.key===\'Enter\')gsAgregar()">'+
+    '<input id="gs-nota" type="text" maxlength="60" placeholder="Nota (opcional): café, SUBE…" style="'+inpS+';flex:1;min-width:150px" onkeydown="if(event.key===\'Enter\')gsAgregar()">'+
+    '<input id="gs-fecha" type="date" value="'+(GS.fechaKeep||hoy)+'" '+inp+'></div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:.7rem 0">'+chips+'</div>'+
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><button class="btn" style="padding:7px 18px;font-weight:700" onclick="gsAgregar()">Agregar gasto</button><span style="font-size:.78rem;color:'+(/^⚠|Escribí|Elegí/.test(GS.msg)?'var(--amber)':'var(--accent)')+'">'+_gsEsc(GS.msg)+'</span></div>');
+  // 2) Mes elegido
+  var cats=Object.keys(pc).sort(function(a,b){return pc[b]-pc[a];}),dias=esActual?+hoy.slice(8,10):new Date(+M.slice(0,4),+M.slice(5,7),0).getDate(),varp=ant>0?(tot/ant-1)*100:null;
+  h+=card('📅 '+_gsMesTxt(M).replace(/^./,function(c){return c.toUpperCase();}),'',
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:.6rem"><button class="btn btn-sm" onclick="gsMes(-1)">◀</button><button class="btn btn-sm" onclick="gsMes(1)"'+(esActual?' disabled':'')+'>▶</button>'+
+    '<span style="margin-left:auto;font-size:.7rem;color:var(--text3)">'+_gsItems(M).length+' gastos</span></div>'+
+    '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:.8rem"><div><div style="font-size:.62rem;color:var(--text3);text-transform:uppercase">Total</div><div style="font-family:var(--mono);font-size:1.4rem;font-weight:800">'+_gsFmt(tot)+'</div></div>'+
+    '<div><div style="font-size:.62rem;color:var(--text3);text-transform:uppercase">Promedio por día</div><div style="font-family:var(--mono);font-size:1.1rem;font-weight:700">'+_gsFmt(tot/dias)+'</div></div>'+
+    '<div><div style="font-size:.62rem;color:var(--text3);text-transform:uppercase">Vs. mes anterior'+(esActual?' (mismo día)':'')+'</div><div style="font-family:var(--mono);font-size:1.1rem;font-weight:700;color:'+(varp==null?'var(--text3)':varp>5?'var(--red)':varp<-5?'var(--accent)':'var(--text2)')+'">'+(varp==null?'—':(varp>=0?'+':'−')+Math.abs(varp).toFixed(0)+'%')+'</div></div></div>'+
+    (cats.length?cats.map(function(c){var p=tot>0?pc[c]/tot*100:0;return '<div style="display:flex;align-items:center;gap:8px;font-size:.78rem;margin:3px 0"><div style="width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_gsEsc(c)+'</div><div style="flex:1;height:10px;background:var(--surface2);border-radius:5px;overflow:hidden"><div style="width:'+p.toFixed(1)+'%;height:100%;background:var(--accent);opacity:.75"></div></div><div style="width:100px;text-align:right;font-family:var(--mono)">'+_gsFmt(pc[c])+'</div><div style="width:38px;text-align:right;color:var(--text3)">'+Math.round(p)+'%</div></div>';}).join(''):'<div style="font-size:.78rem;color:var(--text3)">Todavía no cargaste gastos este mes.</div>'));
+  // 3) Dónde te desviás
+  var base=[_gsMesMas(M,-3),_gsMesMas(M,-2),_gsMesMas(M,-1)].filter(function(m){return _gsTotal(m)>0;}),desv=[];
+  if(base.length>=2){Object.keys(pc).forEach(function(c){var prom=base.reduce(function(s,m){return s+(_gsPorCat(m)[c]||0);},0)/base.length,dif=pc[c]-prom;if(prom>0&&dif>=prom*0.3&&dif>=GS.cfg.umbral)desv.push({c:c,pc:pc[c],prom:prom,dif:dif});});desv.sort(function(a,b){return b.dif-a.dif;});}
+  var mt='<div class="tw"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Categoría</th>'+meses.map(function(m){return '<th style="'+thS+';text-align:right;padding:6px 8px;font-size:.62rem;color:var(--text3);font-weight:600;border-bottom:1px solid var(--border)">'+_gsMesCorto(m)+'</th>';}).join('')+'</tr></thead><tbody>';
+  var todas={};meses.forEach(function(m){Object.keys(_gsPorCat(m)).forEach(function(c){todas[c]=1;});});
+  Object.keys(todas).sort(function(a,b){return (_gsPorCat(M)[b]||0)-(_gsPorCat(M)[a]||0);}).forEach(function(c){mt+='<tr><td '+td+'>'+_gsEsc(c)+'</td>'+meses.map(function(m){var v=_gsPorCat(m)[c]||0,dv=desv.some(function(d){return d.c===c&&m===M;});return '<td style="'+tdS+';padding:6px 8px;border-bottom:1px solid var(--border);font-size:.76rem;text-align:right;font-family:var(--mono);'+(dv?'color:var(--amber);font-weight:700':'')+'">'+(v?_gsFmt(v):'·')+'</td>';}).join('')+'</tr>';});
+  mt+='<tr><td '+td+'><b>Total</b></td>'+meses.map(function(m){return '<td style="'+tdS+';padding:6px 8px;border-bottom:1px solid var(--border);font-size:.76rem;text-align:right;font-family:var(--mono);font-weight:700">'+(_gsTotal(m)?_gsFmt(_gsTotal(m)):'·')+'</td>';}).join('')+'</tr></tbody></table></div>';
+  h+=card('🎯 Dónde te estás desviando','Compara este mes con el promedio de los 3 anteriores. Se marca lo que subió 30% o más y al menos '+_gsFmt(GS.cfg.umbral)+'.',
+    (desv.length?desv.map(function(d){return '<div style="font-size:.82rem;margin:3px 0"><b>'+_gsEsc(d.c)+'</b>: '+_gsFmt(d.pc)+' <span style="color:var(--amber)">(+'+_gsFmt(d.dif)+' sobre tu promedio de '+_gsFmt(d.prom)+')</span></div>';}).join(''):'<div style="font-size:.78rem;color:var(--text3);margin-bottom:.4rem">'+(base.length>=2?'Ninguna categoría se salió de tu promedio este mes.':'Necesito al menos 2 meses anteriores con gastos para comparar.')+'</div>')+'<div style="margin-top:.7rem">'+mt+'</div>');
+  // 4) Gasto hormiga
+  var H=_gsHormiga(M);
+  h+=card('🐜 Gasto hormiga','Gastos de '+_gsFmt(GS.cfg.umbral)+' o menos que se repiten '+GS.cfg.veces+' veces o más en el mes (agrupados por nota; si no hay nota, por categoría).',
+    (H.rep.length?'<div style="font-size:.84rem;margin-bottom:.6rem"><b>'+_gsFmt(H.tot)+'</b> este mes'+(tot>0?' <span style="color:var(--text3)">('+Math.round(H.tot/tot*100)+'% de tus gastos)</span>':'')+' · <span style="color:var(--amber)">≈ '+_gsFmt((esActual?H.tot/dias*new Date(+M.slice(0,4),+M.slice(5,7),0).getDate():H.tot)*12)+' al año si sigue así</span></div>'+
+      '<div class="tw"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Gasto</th><th '+th+'>Veces</th><th '+th+'>Promedio</th><th '+th+'>Total del mes</th></tr></thead><tbody>'+H.rep.slice(0,10).map(function(x){return '<tr><td '+td+'><b>'+_gsEsc(x.k)+'</b> <span class="mu" style="font-size:.64rem">'+_gsEsc(x.cat)+'</span></td><td '+td+'>'+x.n+'</td><td '+td+'>'+_gsFmt(x.t/x.n)+'</td><td '+td+'>'+_gsFmt(x.t)+'</td></tr>';}).join('')+'</tbody></table></div>':
+      '<div style="font-size:.78rem;color:var(--text3)">'+(_gsItems(M).length?'No hay gastos chicos repetidos este mes con esa definición.':'Cargá gastos para ver tu patrón.')+'</div>')+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:.8rem;font-size:.72rem;color:var(--text3)">Gasto chico hasta $<input type="text" inputmode="numeric" value="'+Math.round(GS.cfg.umbral)+'" onchange="gsUmbral(this.value)" style="'+inpS+';width:90px;padding:4px 7px;font-size:.78rem"> · se repite desde <input type="number" min="2" max="31" value="'+GS.cfg.veces+'" onchange="gsVeces(this.value)" style="'+inpS+';width:56px;padding:4px 7px;font-size:.78rem"> veces</div>');
+  // 5) Movimientos del mes
+  var its=_gsItems(M).slice().sort(function(a,b){return a.f<b.f?1:a.f>b.f?-1:(a.id<b.id?1:-1);}).slice(0,60);
+  h+=card('🧾 Movimientos del mes','',its.length?'<div class="tw"><table style="width:100%;border-collapse:collapse"><tbody>'+its.map(function(x){return '<tr><td '+td+'>'+x.f.slice(8,10)+'/'+x.f.slice(5,7)+'</td><td '+td+'>'+_gsEsc(x.c)+(x.n?' <span style="color:var(--text3)">· '+_gsEsc(x.n)+'</span>':'')+'</td><td style="'+tdS+';padding:7px 8px;border-bottom:1px solid var(--border);font-size:.76rem;text-align:right;font-family:var(--mono)">'+_gsFmt(x.m)+'</td><td '+td+'><button class="btn btn-sm" onclick="gsBorrar(\''+M+'\',\''+x.id+'\')" title="Borrar">✕</button></td></tr>';}).join('')+'</tbody></table></div>':'<div style="font-size:.78rem;color:var(--text3)">Sin movimientos.</div>');
+  // 6) Categorías
+  h+=card('⚙ Categorías','Las que aparecen como botones en la carga rápida.','<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+GS.cfg.cats.map(function(c){return '<span class="nvchip" style="cursor:default">'+_gsEsc(c)+' <span style="cursor:pointer;color:var(--text3)" onclick="gsQuitarCat(\''+_gsEsc(c).replace(/'/g,"\\'")+'\')" title="Quitar">✕</span></span>';}).join('')+
+    '<input id="gs-newcat" type="text" maxlength="24" placeholder="Nueva categoría" style="'+inpS+';width:150px;padding:5px 8px;font-size:.78rem" onkeydown="if(event.key===\'Enter\')gsNuevaCat()"><button class="btn btn-sm" onclick="gsNuevaCat()">+ Agregar</button></div>');
+  var gv=function(i){return (document.getElementById(i)||{}).value||'';},keepM=foco?gv('gs-monto'):'',keepN=foco?gv('gs-nota'):'',keepF=foco?gv('gs-fecha'):'';
+  pg.innerHTML='<div style="max-width:900px;margin:0 auto">'+h+'</div>';
+  if(foco){var mi=document.getElementById('gs-monto'),ni=document.getElementById('gs-nota'),fi=document.getElementById('gs-fecha');if(mi&&keepM)mi.value=keepM;if(ni&&keepN)ni.value=keepN;if(fi&&keepF&&!/^✔/.test(GS.msg))fi.value=keepF;if(mi&&(!GS.msg||/^✔/.test(GS.msg)))mi.focus();}
+}
+function gsInit(){if(document.getElementById('page-gastos'))return;var pp=document.getElementById('page-portafolio'),mb=document.querySelector('.nav-item[onclick*="\'estrategia\'"]')||document.querySelector('.nav-item[onclick*="\'balances\'"]');if(!pp||!mb)return;
+  var pg=document.createElement('div');pg.className='page';pg.id='page-gastos';pp.parentNode.appendChild(pg);
+  var b=document.createElement('button');b.className='nav-item';b.setAttribute('onclick',"showPage('gastos',this)");b.innerHTML='<span>💸</span>Gastos';mb.parentNode.insertBefore(b,mb.nextSibling);}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(gsInit,300);});else setTimeout(gsInit,900);
 
 // ─── 🌡 Termómetro · 📅 Calendario de ganancias · 🌙 Repaso nocturno (vista nueva) ─────────────
 function nvTermo(){var el=document.getElementById('nv-kt');if(!el)return;var L=NV_ROWS,n=0,v=0,cerca=0,rsiN=0,rsiA=0;
