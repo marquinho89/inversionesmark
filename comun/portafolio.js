@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2869, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2870, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2870 | 2026-11-10 | Laboratorio: prueba de robustez (casos agrupados por mes), nivel de evidencia fuerte/moderada/débil en los avisos, ⚖ señales contradictorias y universo de Cedears ampliado (los 150 más operados). Hay que volver a correr el laboratorio.',
   'v2869 | 2026-11-07 | Laboratorio de señales (Estrategia): 7 combinaciones con criterio de aprobación fijo, calibración/verificación por fechas y neto de comisiones; avisos 🟢/🔴 en la fila y tarjeta 🚦 solo con señales aprobadas; registro hacia adelante.',
   'v2868 | 2026-11-07 | Señales técnicas: la media de 200 pasa a EMA200, se suma la WMA21 (línea violeta en el gráfico) y las divergencias alcistas/bajistas del RSI (confirmadas 5 ruedas después, sin mirar el futuro).',
   'v2867 | 2026-11-07 | ⚡ Tiempo casi real: botón junto a la hora de actualización para refrescar cada 1 minuto con el mercado abierto.',
@@ -11759,7 +11760,7 @@ function nvSenales(){var cw=document.getElementById('nv-cards');if(!cw)return;va
   var top=document.querySelector('#nv-root .nvdist');if(top&&top.parentNode){top.parentNode.insertBefore(card,top);card.style.cssText='margin:0 0 .8rem;padding:9px 14px;border-left:3px solid #e3b341';}else{cw.insertBefore(card,cw.firstChild);}
   card.style.display='';
   card.innerHTML='<div style="font-size:.78rem;line-height:1.9"><b>🚦 Señales validadas hoy</b> <span style="color:var(--text3);font-size:.66rem">(pasaron la prueba del laboratorio)</span><br>'+k.map(function(t){var a=ST_ACT[t],buy=a.filter(function(x){return x.r.dir>0;}).length,sell=a.length-buy;
-    return '<span class="nvchip" style="margin-right:6px;cursor:pointer" onclick="stAbrir(\''+t+'\')">'+(buy?'🟢':'')+(sell?'🔴':'')+' <b>'+t+'</b></span>';}).join('')+'</div>';}
+    return '<span class="nvchip" style="margin-right:6px;cursor:pointer" onclick="stAbrir(\''+t+'\')">'+(buy&&sell?'⚖':(buy?'🟢':'🔴'))+' <b>'+t+'</b></span>';}).join('')+'</div>';}
 async function stChips(){
   if(_stRunning||!NV_ROWS||!NV_ROWS.length||!LAB.res)return;_stRunning=true;var cambio=false;
   try{
@@ -11770,9 +11771,11 @@ async function stChips(){
           if(ev.length&&ev[ev.length-1]>=n-LAB_P.ventana){var q=ev[ev.length-1];act.push({r:r,x:x});_labLogAgregar(o.t,r.id,R.d[q],R.c[q]);}});
         ST_ACT[o.t]=act;
         if(act.length){var B=act.filter(function(a){return a.r.dir>0;}),V=act.filter(function(a){return a.r.dir<0;});
-          var mk=function(L,dir){if(!L.length)return '';var tip=L.map(function(a){return a.r.nom+': '+(a.x.val.m>0?'+':'')+a.x.val.m.toFixed(1).replace('.',',')+' pts vs. lo normal a 3 meses ('+a.x.val.n+' casos, verificación)';}).join(' | ');
-            return '<span class="nvchip" style="padding:0 5px;margin-left:4px;font-size:.66rem;color:'+(dir>0?'var(--accent)':'var(--red)')+'" title="Señal validada: '+tip.replace(/"/g,'')+'" onclick="event.stopPropagation();stAbrir(\''+o.t+'\')">'+(dir>0?'🟢 Compra':'🔴 Venta')+(L.length>1?' ×'+L.length:'')+'</span>';};
-          ST_CHIP[o.t]=mk(B,1)+mk(V,-1);cambio=true;}
+          var niv=function(L){var o2={fuerte:3,moderada:2,debil:1},m=0,k='debil';L.forEach(function(a){var v=o2[a.x.ev||'debil'];if(v>m){m=v;k=a.x.ev||'debil';}});return k;};
+          var tipDe=function(L){return L.map(function(a){return a.r.nom+': '+(a.x.val.m>0?'+':'')+a.x.val.m.toFixed(1).replace('.',',')+' pts vs. lo normal a 3 meses ('+a.x.val.n+' casos, verificación; evidencia '+(LAB_EVN[a.x.ev||'debil'])+')';}).join(' | ').replace(/"/g,'');};
+          var mk=function(L,dir){if(!L.length)return '';var nv=niv(L);
+            return '<span class="nvchip" style="padding:0 5px;margin-left:4px;font-size:.66rem;color:'+(dir>0?'var(--accent)':'var(--red)')+';'+(nv==='debil'?'opacity:.6;border-style:dashed':nv==='fuerte'?'font-weight:800':'')+'" title="Señal validada, evidencia '+LAB_EVN[nv]+': '+tipDe(L)+'" onclick="event.stopPropagation();stAbrir(\''+o.t+'\')">'+(dir>0?'🟢 Compra':'🔴 Venta')+(L.length>1?' ×'+L.length:'')+' · '+LAB_EVN[nv]+'</span>';};
+          ST_CHIP[o.t]=(B.length&&V.length)?'<span class="nvchip" style="padding:0 5px;margin-left:4px;font-size:.66rem;color:var(--text3)" title="Hay una señal validada de compra y otra de venta al mismo tiempo: se contradicen. Mirá el detalle en 📊." onclick="event.stopPropagation();stAbrir(\''+o.t+'\')">⚖ Señales contradictorias</span>':mk(B,1)+mk(V,-1);cambio=true;}
       }catch(e){}
       await new Promise(function(r){setTimeout(r,300);});
     }
@@ -11807,7 +11810,7 @@ function _labAnalizarActivo(d,c,az){
   var fwd=function(i){return i+H<n?c[i+H]/c[i]-1:null;};
   var sc={cal:[0,0],val:[0,0]};for(var i=0;i+H<n;i++){var p=d[i]<=LAB_P.corte?'cal':'val';sc[p][0]+=fwd(i);sc[p][1]++;}
   var bm={cal:sc.cal[1]?sc.cal[0]/sc.cal[1]:null,val:sc.val[1]?sc.val[0]/sc.val[1]:null};
-  LAB_REGLAS.forEach(function(r){var ev=_labEventos(M.E,n,r),L=[];ev.forEach(function(i){var f=fwd(i);if(f==null)return;var p=d[i]<=LAB_P.corte?'cal':'val';if(bm[p]==null)return;L.push({p:p,y:d[i].slice(0,4),x:(f-bm[p])*100*r.dir});});res[r.id]=L;});
+  LAB_REGLAS.forEach(function(r){var ev=_labEventos(M.E,n,r),L=[];ev.forEach(function(i){var f=fwd(i);if(f==null)return;var p=d[i]<=LAB_P.corte?'cal':'val';if(bm[p]==null)return;L.push({p:p,y:d[i].slice(0,4),mo:d[i].slice(0,7),x:(f-bm[p])*100*r.dir});});res[r.id]=L;});
   return res;
 }
 function _labStats(L){var n=L.length;if(!n)return {n:0};var m=L.reduce(function(s,v){return s+v.x;},0)/n,w=L.filter(function(v){return v.x>0;}).length/n*100;return {n:n,m:m,w:w};}
@@ -11820,6 +11823,16 @@ function _labVeredicto(cal,val,anos){
   if(ys.length<LAB_P.anosMin)f.push('pocos años con datos ('+ys.length+')');else if(pos/ys.length<LAB_P.pctAnos)f.push('solo fue positiva en '+pos+' de '+ys.length+' años');
   return f.length?{st:'no',txt:'No pasó: '+f.join('; ')}:{st:'ok',txt:'Aprobada'};
 }
+// Robustez: los casos que caen en el mismo mes cuentan como uno (los activos se mueven juntos). Informativo: no cambia las aprobaciones.
+function _labCluster(L){var by={};L.forEach(function(e){(by[e.mo]=by[e.mo]||[]).push(e.x);});var ms=Object.keys(by).map(function(k){return by[k].reduce(function(s,v){return s+v;},0)/by[k].length;}),k=ms.length;
+  if(k<6)return {k:k,m:null,t:null,pos:null};var m=ms.reduce(function(s,v){return s+v;},0)/k,sd=Math.sqrt(ms.reduce(function(s,v){return s+(v-m)*(v-m);},0)/(k-1));
+  return {k:k,m:m,t:sd>0?m/(sd/Math.sqrt(k)):null,pos:ms.filter(function(v){return v>0;}).length/k*100};}
+// Nivel de evidencia (regla fija): fuerte = t>=2 por meses y acertó >=55%; moderada = t>=1,5; el resto de las aprobadas es débil.
+function _labEvidencia(val,cl){if(cl&&cl.t!=null){if(cl.t>=2&&val.w>=55)return 'fuerte';if(cl.t>=1.5)return 'moderada';}return 'debil';}
+var LAB_EVN={fuerte:'fuerte',moderada:'moderada',debil:'débil'};
+// Universo de Cedears ampliado con regla fija: los 150 más operados de la lista en vivo de data912, además de la lista base.
+async function _labCedLive(){try{var r=await fetchWithTimeout('https://data912.com/live/arg_cedears',{headers:{Accept:'application/json'}},12000);if(!r.ok)return [];var a=await r.json();if(!Array.isArray(a))return [];
+  return a.map(function(x){return {t:String(x.symbol||x.ticker||'').toUpperCase(),v:parseFloat(x.v||x.volume||x.q_op||x.vol||0)||0};}).filter(function(x){return /^[A-Z]{1,5}$/.test(x.t);}).sort(function(a,b){return b.v-a.v;}).slice(0,150).map(function(x){return x.t;});}catch(e){return [];}}
 function _labUniverso(){var m={};
   try{estPos().L.forEach(function(o){var s=getSector(o.tk);if(['bonos','on','fci'].indexOf(s)<0)m[o.tk]=s;});}catch(e){}
   try{estTickers().forEach(function(t){var s=getSector(t);if(['bonos','on','fci'].indexOf(s)<0)m[t]=s;});}catch(e){}
@@ -11827,19 +11840,22 @@ function _labUniverso(){var m={};
   return m;}
 async function labCorrer(){
   if(LAB.busy)return;LAB.busy=true;LAB.msg='Preparando…';try{estRender();}catch(e){}
-  try{var U=_labUniverso(),T=Object.keys(U),acc={},cob={ar:{act:0,kon:0},ced:{act:0,kon:0}},hechos=0;
+  try{var U=_labUniverso();LAB.msg='Buscando la lista de Cedears más operados…';try{estRender();}catch(e){}var live=await _labCedLive();live.forEach(function(t){if(!U[t])U[t]=getSector(t);});var T=Object.keys(U),acc={},cob={ar:{act:0,kon:0},ced:{act:0,kon:0}},hechos=0;
     LAB_REGLAS.forEach(function(r){acc[r.id]={ar:[],ced:[]};});
-    for(var t=0;t<T.length;t++){var tk=T[t],g=U[tk]==='argentina'?'ar':'ced';LAB.msg='Analizando '+(t+1)+' de '+T.length+' · '+tk;try{estRender();}catch(e){}
-      try{var S=await _phSerie(tk,U[tk]);if(!S||!S.ser||S.ser.length<400)continue;
+    var sig=0,hecho=0;
+    var worker=async function(){while(sig<T.length){var tk=T[sig++],g=U[tk]==='argentina'?'ar':'ced';
+      try{var S=await _phSerie(tk,U[tk]);if(S&&S.ser&&S.ser.length>=400){
         var R=await _stOhlc(tk,U[tk]),d=S.ser.map(function(x){return x[0];}),c=S.ser.map(function(x){return x[1];}),az=null,kmap={};
         if(R.length>150){var kz=_stKonc(R);R.forEach(function(r,i){kmap[r.d]=kz.azul[i];});az=d.map(function(x){return kmap[x]!=null?kmap[x]:null;});}
-        var rs=_labAnalizarActivo(d,c,az);LAB_REGLAS.forEach(function(r){rs[r.id].forEach(function(e){acc[r.id][g].push(e);});});cob[g].act++;if(az)cob[g].kon++;hechos++;
+        var rs=_labAnalizarActivo(d,c,az);LAB_REGLAS.forEach(function(r){rs[r.id].forEach(function(e){acc[r.id][g].push(e);});});cob[g].act++;if(az)cob[g].kon++;hechos++;}
       }catch(e){}
-      await new Promise(function(r){setTimeout(r,250);});}
+      hecho++;LAB.msg='Analizando '+hecho+' de '+T.length+' · '+tk;try{estRender();}catch(e){}
+      await new Promise(function(r){setTimeout(r,200);});}};
+    await Promise.all([worker(),worker()]);
     var out={ts:Date.now(),n:hechos,cob:cob,reglas:{}};
     LAB_REGLAS.forEach(function(r){out.reglas[r.id]={};['ar','ced'].forEach(function(g){var L=acc[r.id][g],cal=_labStats(L.filter(function(e){return e.p==='cal';})),val=_labStats(L.filter(function(e){return e.p==='val';})),anos={};
       L.filter(function(e){return e.p==='val';}).forEach(function(e){(anos[e.y]=anos[e.y]||[]).push(e.x);});var A={};Object.keys(anos).forEach(function(y){A[y]={n:anos[y].length,m:anos[y].reduce(function(s,v){return s+v;},0)/anos[y].length};});
-      var v=_labVeredicto(cal,val,A);out.reglas[r.id][g]={cal:cal,val:val,anos:A,st:v.st,txt:v.txt};});});
+      var v=_labVeredicto(cal,val,A),cl=_labCluster(L.filter(function(e){return e.p==='val';}));out.reglas[r.id][g]={cal:cal,val:val,anos:A,st:v.st,txt:v.txt,cl:cl,ev:v.st==='ok'?_labEvidencia(val,cl):null};});});
     LAB.res=out;try{localStorage.setItem(PFX+'lab_v1',JSON.stringify(out));}catch(e){}try{sbSetConfig('lab_senales',out);}catch(e){}
     LAB.msg='';
     _stDone={};ST_CHIP={};
@@ -11847,7 +11863,7 @@ async function labCorrer(){
   LAB.busy=false;try{estRender();}catch(e){}try{nvRender();}catch(e){}}
 function _labHtml(th,td,btn){
   var f1=function(x,d){return x==null||!isFinite(x)?'—':(x>0?'+':x<0?'−':'')+Math.abs(x).toFixed(d==null?1:d).replace('.',',')+'%';},R=LAB.res;
-  var h=(LAB.busy?'<button class="btn btn-sm" disabled>…</button>':'<button class="btn btn-sm" onclick="labCorrer()">'+(R?'Volver a correr':'Correr laboratorio')+'</button>')+' <span style="font-size:.7rem;color:var(--text3)">'+(LAB.msg||'Prueba 7 combinaciones fijas con ~60 activos. Tarda varios minutos la primera vez.')+'</span>';
+  var h=(LAB.busy?'<button class="btn btn-sm" disabled>…</button>':'<button class="btn btn-sm" onclick="labCorrer()">'+(R?'Volver a correr':'Correr laboratorio')+'</button>')+' <span style="font-size:.7rem;color:var(--text3)">'+(LAB.msg||'Prueba 7 combinaciones fijas con las argentinas más operadas y hasta 150 Cedears. Tarda bastantes minutos.')+'</span>';
   h+='<div style="font-size:.68rem;color:var(--text3);margin:.5rem 0;line-height:1.55"><b>Reglas fijas:</b> una señal combinada cuenta cuando sus componentes aparecen dentro de '+LAB_P.ventana+' ruedas; un caso por episodio (mínimo '+LAB_P.sep+' ruedas entre casos del mismo activo); se mide el retorno a '+LAB_P.H+' ruedas contra el promedio del propio activo. Se calibra hasta 2021 y se verifica de 2022 en adelante. <b>Aprobada</b> si en la verificación: ≥'+LAB_P.nMin+' casos, mismo signo y al menos la mitad del efecto, supera '+LAB_P.costo.toString().replace('.',',')+'% de comisiones, y fue positiva en ≥'+Math.round(LAB_P.pctAnos*100)+'% de los años (mínimo '+LAB_P.anosMin+' años con ≥'+LAB_P.anoEv+' casos).</div>';
   if(R){var ap=0,tot=0;LAB_REGLAS.forEach(function(r){['ar','ced'].forEach(function(g){tot++;if(R.reglas[r.id][g].st==='ok')ap++;});});
     h+='<div style="font-size:.8rem;margin:.4rem 0"><b>'+ap+' de '+tot+'</b> pruebas aprobadas · '+R.n+' activos analizados · '+new Date(R.ts).toLocaleString('es-AR')+(R.cob?' · con datos de Koncorde: argentinas '+R.cob.ar.kon+'/'+R.cob.ar.act+', Cedears '+R.cob.ced.kon+'/'+R.cob.ced.act:'')+'</div>';
@@ -11855,8 +11871,8 @@ function _labHtml(th,td,btn){
     LAB_REGLAS.map(function(r){return ['ar','ced'].map(function(g){var x=R.reglas[r.id][g],ok=x.st==='ok';
       var cel=function(s){return s.n?s.n+' casos · '+f1(s.m)+' · acertó '+Math.round(s.w)+'%':'sin casos';};
       return '<tr><td '+td+'><b>'+(r.dir>0?'🟢 ':'🔴 ')+r.nom+'</b></td><td '+td+'>'+(g==='ar'?'Argentinas':'Cedears')+'</td><td '+td+'>'+cel(x.cal)+'</td><td '+td+'>'+cel(x.val)+(x.val.n?'<div style="font-size:.64rem;color:var(--text3)">neto de comisiones '+f1(x.val.m-LAB_P.costo)+'</div>':'')+'</td>'+
-        '<td '+td+'><span style="color:'+(ok?'var(--accent)':x.st==='pocos'?'var(--text3)':'var(--red)')+';font-weight:700">'+(ok?'✔ ':x.st==='pocos'?'• ':'✖ ')+x.txt+'</span></td></tr>';}).join('');}).join('')+'</tbody></table></div>';
-    h+='<div style="font-size:.66rem;color:var(--text3);margin-top:.4rem">Los efectos son puntos de retorno por encima (compra) o por debajo (venta) de lo normal del propio activo a '+LAB_P.H+' ruedas. Solo las señales aprobadas aparecen como aviso en la fila de tus acciones.</div>';}
+        '<td '+td+'><span style="color:'+(ok?'var(--accent)':x.st==='pocos'?'var(--text3)':'var(--red)')+';font-weight:700">'+(ok?'✔ ':x.st==='pocos'?'• ':'✖ ')+x.txt+'</span>'+(ok?'<div style="font-size:.66rem;margin-top:2px;color:'+(x.ev==='fuerte'?'var(--accent)':x.ev==='moderada'?'#e3b341':'var(--text3)')+'">Evidencia '+(LAB_EVN[x.ev]||'débil')+(x.cl&&x.cl.t!=null?' · por mes '+f1(x.cl.m)+' (t='+x.cl.t.toFixed(1).replace('.',',')+', '+x.cl.k+' meses, positivo en '+Math.round(x.cl.pos)+'%)':' · sin datos de robustez (volvé a correr)')+'</div>':'')+'</td></tr>';}).join('');}).join('')+'</tbody></table></div>';
+    h+='<div style="font-size:.66rem;color:var(--text3);margin-top:.4rem">Los efectos son puntos de retorno por encima (compra) o por debajo (venta) de lo normal del propio activo a '+LAB_P.H+' ruedas. Solo las señales aprobadas aparecen como aviso en la fila de tus acciones. <b>Evidencia:</b> los casos del mismo mes cuentan como uno (los activos se mueven juntos); <i>fuerte</i> si t ≥ 2 y acertó ≥ 55%, <i>moderada</i> si t ≥ 1,5, <i>débil</i> el resto. Es informativo: no cambia lo aprobado.</div>';}
   // registro hacia adelante
   var lg=LAB.log.slice().reverse().slice(0,12);
   h+='<div style="margin-top:.9rem;font-size:.78rem"><b>📓 Registro hacia adelante</b> <span style="color:var(--text3);font-size:.68rem">cada señal aprobada que aparece se anota con su fecha; a las '+LAB_P.H+' ruedas se anota qué pasó. Las reglas no se tocan.</span></div>'+
