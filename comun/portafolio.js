@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2871, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2872, APP_VERSION_FECHA='30/10/2026';
 var APP_CHANGELOG=[
+  'v2872 | 2026-11-10 | Rotaciones: 👀 Vendidas para volver a mirar (bajaron X% desde tu venta; semáforo con valuación, tendencia y resultados; muestra por qué la vendiste) y aviso 🟢 en la cartera.',
   'v2871 | 2026-11-10 | Nueva página 💸 Gastos: carga rápida (monto + categoría), resumen por mes y categoría, dónde te desviás de tu promedio y detector de gasto hormiga. Cada perfil con sus gastos.',
   'v2870 | 2026-11-10 | Laboratorio: prueba de robustez (casos agrupados por mes), nivel de evidencia fuerte/moderada/débil en los avisos, ⚖ señales contradictorias y universo de Cedears ampliado (los 150 más operados). Hay que volver a correr el laboratorio.',
   'v2869 | 2026-11-07 | Laboratorio de señales (Estrategia): 7 combinaciones con criterio de aprobación fijo, calibración/verificación por fechas y neto de comisiones; avisos 🟢/🔴 en la fila y tarjeta 🚦 solo con señales aprobadas; registro hacia adelante.',
@@ -11566,7 +11567,7 @@ function nvRender(){
    var hd=document.querySelector('header');if(hd)hd.style.display='none';document.body.classList.add('nv-port');document.body.classList.add('nv-on');document.documentElement.classList.remove('nv-pre');}catch(e){}
   var main=document.getElementById('main');if(main){main.style.outline='2px solid '+col;main.style.outlineOffset='-2px';main.style.borderRadius='14px';}
   nvModo(NV.modo);}
- _nvMover();try{nvTermo();nvCalendario();nvMov();nvIdeal();nvPlanSalida();nvVal();nvLinea();setTimeout(function(){try{stChips();}catch(e){}},2500);}catch(e){console.warn('nv extras',e);}try{bcSwapCard();}catch(e){}
+ _nvMover();try{nvTermo();nvCalendario();nvMov();nvIdeal();nvPlanSalida();nvVal();nvLinea();setTimeout(function(){try{stChips();}catch(e){}},2500);setTimeout(function(){try{vsAlerta();}catch(e){}},5000);}catch(e){console.warn('nv extras',e);}try{bcSwapCard();}catch(e){}
  var k=NV_K;document.getElementById('nv-kv').textContent=k.val!=null?'USD '+_nvN(k.val):'—';
  var kr=document.getElementById('nv-kr');kr.textContent=_nvP(k.rend);kr.style.color=k.rend>=0?'var(--accent)':'var(--red)';document.getElementById('nv-krs').textContent=k.gan!=null?((k.gan>=0?'+':'−')+'USD '+_nvN(Math.abs(k.gan))):'';
  var kh=document.getElementById('nv-kh');kh.textContent=_nvP(k.hoyP);kh.style.color=(k.hoyP||0)>=0?'var(--accent)':'var(--red)';document.getElementById('nv-khs').textContent=k.hoy!=null?((k.hoy>=0?'+':'−')+'USD '+_nvN(Math.abs(k.hoy))):'';
@@ -12214,6 +12215,7 @@ function valAyuda(){
 async function valCargar(){if(_valRun||!_valOn())return;_valRun=true;
   try{var seen={},L=NV_ROWS.filter(function(o){if(!_valOk(o)||seen[o.t])return false;seen[o.t]=1;return true;}).map(function(o){return o.t;});
     try{estTickers().forEach(function(t){if(L.indexOf(t)<0)L.push(t);});}catch(e){}
+    try{(window._vsTk||[]).forEach(function(t){if(L.indexOf(t)<0)L.push(t);});}catch(e){}
     var P=L.filter(function(t){return !VAL[t]||!VAL[t].v||VAL[t].q!==1||Date.now()-VAL[t].ts>20*3600e3;});_valProg=P.length?[0,P.length]:null;
     for(var i=0;i<P.length;i++){var t=P[i],s=getFinnhubTicker(t);
       try{var m=await (await fetchWithTimeout(FBASE+'/stock/metric?symbol='+encodeURIComponent(s)+'&metric=all&token='+FKEY,{},10000)).json();
@@ -12883,6 +12885,65 @@ async function decRender(){var pg=document.getElementById('page-rotaciones');if(
       X.map(function(g){var c=g.dif>=0?'var(--accent)':'var(--red)';return '<tr style="border-top:1px solid var(--border)"><td style="padding:6px 5px"><b>'+g.t+'</b>'+(g.re?' <span style="color:#448aff" title="Lo volviste a comprar">●</span>':'')+'</td><td style="text-align:right;color:var(--text3)">'+g.f.split('-').reverse().join('/')+'</td><td style="text-align:right" class="port-sensitive">'+N(g.u)+'</td><td style="text-align:right" class="port-sensitive">'+N(g.hoy)+'</td><td style="text-align:right;color:'+c+'" class="port-sensitive">'+(g.dif>=0?'+':'−')+N(g.dif)+'</td><td style="text-align:right;color:'+c+'">'+P1(g.pct)+'</td><td style="text-align:right"><span onclick="decExc(\''+g.t+'\',1)" title="No contar este activo (fue una decisión a propósito)" style="cursor:pointer;color:var(--text3)">✕</span></td></tr>';}).join('')+'</table></div>';
     h+='<div style="font-size:.66rem;color:var(--text3);margin-top:6px;line-height:1.5">Verde = después de vender subió (te perdiste esa suba) · rojo = bajó (acertaste) · ● = lo volviste a comprar · ✕ = no contarlo (también sale del sesgo). Qué hiciste con esa plata: mirá la tabla de Rotaciones, más abajo.'+(R.length?' Sin dato confiable (precio que no cierra, revisar): '+R.map(function(g){return g.t;}).join(', ')+'.':'')+'</div>';}
   el.innerHTML=h+'</div>';_decOdeanFill();}
+// ─── 👀 Vendidas para volver a mirar: acciones que vendiste y hoy están bien por debajo de tu precio de venta ─────────────
+// No dice "comprá": filtra cuáles vale la pena revisar mirando valuación, tendencia reciente y resultados cercanos, y te muestra por qué las vendiste.
+var VS={umbral:15,cache:null,busy:false,tried:false};
+try{var _vsu=parseFloat(localStorage.getItem('vs_umbral'));if(_vsu>=3&&_vsu<=90)VS.umbral=_vsu;}catch(e){}
+function vsUmbral(v){var n=parseFloat(String(v).replace(',','.'));if(n>=3&&n<=90){VS.umbral=n;VS.cache=null;try{localStorage.setItem('vs_umbral',String(n));}catch(e){}}vsRender();}
+function _vsCand(){var D=_decVentas(),A=_decNoVend(D,12),held={};
+  return A.filter(function(g){return !g.raro&&!g.re&&['bonos','on','fci'].indexOf(g.s)<0&&g.pct<=-VS.umbral&&DEC.exc.indexOf(g.t)<0;}).map(function(g){
+    var ven=D.V.filter(function(v){return v.t===g.t;}).sort(function(a,b){return a.f<b.f?1:-1;}),ult=ven[0]||null;
+    var comp=_decMovs().filter(function(m){return m.ticker===g.t&&m.tipo==='compra'&&m.venderSi;}).sort(function(a,b){return (_phIso(b.fecha)||'')<(_phIso(a.fecha)||'')?-1:1;})[0];
+    return {t:g.t,f:g.f,pct:g.pct,u:g.u,hoy:g.hoy,porque:ult&&ult.m&&ult.m.porque||'',venderSi:comp&&comp.venderSi||'',gp:ult?ult.gp:null};});}
+function _vsSig(c,val,R,ern){
+  var why=[],est=val&&val.est||'sin',r20=null,ema=null,rsi=null;
+  if(R&&!R.err){var n=R.c.length;if(n>21)r20=(R.c[n-1]/R.c[n-21]-1)*100;ema=R.hoy.ema;rsi=R.hoy.rsi;}
+  var caida=r20!=null&&((r20<=-10&&ema!=null&&ema<0)||r20<=-18);
+  var sem;
+  if(est==='cara'){sem='r';}
+  else if(caida){sem=est==='barata'?'y':'r';}
+  else if(est==='sin'||est==='normal'&&false){sem='y';}
+  else if(ern!=null&&ern<=7){sem='y';}
+  else sem='g';
+  if(est==='sin')why.push('Sin dato de valuación (no podemos decir si está barata)');else why.push('Valuación: '+(est==='barata'?'barata frente a su historia':est==='cara'?'cara frente a su historia':'en línea con su historia'));
+  if(r20!=null)why.push('Último mes: '+(r20>=0?'+':'−')+Math.abs(r20).toFixed(0)+'%'+(caida?' (sigue cayendo)':''));
+  if(ema!=null)why.push('Precio '+(ema>=0?'sobre':'bajo')+' la EMA200 ('+(ema>=0?'+':'−')+Math.abs(ema).toFixed(0)+'%)');
+  if(rsi!=null)why.push('RSI '+rsi.toFixed(0));
+  if(ern!=null&&ern<=30)why.push('Presenta resultados en '+ern+' día'+(ern===1?'':'s'));
+  return {sem:sem,why:why};}
+function _vsErn(t){try{if(!BAL.d||!BAL.d.e)return null;var s=getFinnhubTicker(t),b=null;BAL.d.e.forEach(function(x){if(x.s!==s)return;var d=_balDias(x.f);if(d>=0&&(b==null||d<b))b=d;});return b;}catch(e){return null;}}
+async function vsEval(){
+  if(VS.cache&&VS.cache.u===VS.umbral&&Date.now()-VS.cache.ts<20*60000)return VS.cache.list;
+  var C=_vsCand().slice(0,15);window._vsTk=C.map(function(c){return c.t;});
+  if(C.some(function(c){return !VAL[c.t]||!VAL[c.t].v;})&&!VS.tried&&typeof valCargar==='function'){VS.tried=true;try{await valCargar();}catch(e){}}
+  var out=[];for(var i=0;i<C.length;i++){var c=C[i],R=null;try{R=await _stCalc(c.t);}catch(e){}
+    var s=_vsSig(c,_valDe(c.t),R,_vsErn(c.t));out.push(Object.assign({},c,s));}
+  var ord={g:0,y:1,r:2};out.sort(function(a,b){return ord[a.sem]-ord[b.sem]||a.pct-b.pct;});
+  VS.cache={ts:Date.now(),u:VS.umbral,list:out};return out;}
+async function vsRender(){
+  var base=document.getElementById('dec-card');if(!base||!base.parentNode)return;var el=document.getElementById('vs-card');
+  if(!el){el=document.createElement('div');el.id='vs-card';base.parentNode.insertBefore(el,base.nextSibling);}
+  var hd='<div class="card" style="margin-bottom:1rem;padding:12px 14px"><div class="card-header" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 0 8px"><span class="card-title">👀 Vendidas para volver a mirar</span><span style="margin-left:auto;font-size:.72rem;color:var(--text2)">Mostrar las que están al menos <input type="number" min="3" max="90" value="'+VS.umbral+'" onchange="vsUmbral(this.value)" style="width:52px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:2px 5px;font-size:.74rem"> % por debajo de tu venta</span></div>';
+  el.innerHTML=hd+'<div style="font-size:.76rem;color:var(--text3)">Revisando tus ventas…</div></div>';
+  var L=[];try{L=await vsEval();}catch(e){el.innerHTML=hd+'<div style="font-size:.76rem;color:var(--red)">No se pudo calcular: '+_diaEsc(e&&e.message||e)+'</div></div>';return;}
+  var N=function(x){return Math.round(Math.abs(x)).toLocaleString('es-AR');},ic={g:'🟢',y:'🟡',r:'🔴'},tx={g:'Para mirar',y:'Dudosa',r:'No es oportunidad'},col={g:'var(--accent)',y:'var(--amber)',r:'var(--red)'};
+  var h=hd+'<div style="font-size:.72rem;color:var(--text3);margin-bottom:.6rem;line-height:1.5">Es un filtro para decidir qué revisar, no una orden de compra. Que algo haya bajado desde que lo vendiste no alcanza: acá se mira también si está cara o barata, si sigue cayendo y si presenta resultados pronto. Ventas de los últimos 12 meses.</div>';
+  if(!L.length)h+='<div style="font-size:.78rem;color:var(--text3)">Ninguna de tus ventas del último año está hoy '+VS.umbral+'% o más por debajo del precio al que vendiste.</div>';
+  else h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.76rem"><thead><tr style="color:var(--text3);font-size:.6rem;text-transform:uppercase;text-align:left"><th style="padding:5px">Acción</th><th style="padding:5px">Vendida</th><th style="padding:5px">Bajó</th><th style="padding:5px">Lectura</th><th style="padding:5px">Por qué la vendiste</th><th></th></tr></thead><tbody>'+
+    L.map(function(c){return '<tr style="border-top:1px solid var(--border);vertical-align:top"><td style="padding:7px 5px"><b style="font-family:var(--mono)">'+c.t+'</b></td><td style="padding:7px 5px;color:var(--text3)">'+c.f.split('-').reverse().join('/')+(c.gp!=null&&isFinite(c.gp)?'<div style="font-size:.64rem">'+(c.gp>=0?'con ganancia ':'con pérdida ')+(c.gp>=0?'+':'−')+Math.abs(c.gp).toFixed(0)+'%</div>':'')+'</td>'+
+      '<td style="padding:7px 5px;font-family:var(--mono);color:var(--red);font-weight:700">−'+Math.abs(c.pct).toFixed(0)+'%</td>'+
+      '<td style="padding:7px 5px"><div style="color:'+col[c.sem]+';font-weight:700">'+ic[c.sem]+' '+tx[c.sem]+'</div><div style="font-size:.66rem;color:var(--text3);line-height:1.5;margin-top:2px">'+c.why.map(_diaEsc).join('<br>')+'</div></td>'+
+      '<td style="padding:7px 5px;font-size:.7rem;color:var(--text2);max-width:260px">'+(c.porque?'“'+_diaEsc(c.porque)+'”':'<span style="color:var(--text3)">No anotaste el motivo</span>')+(c.venderSi?'<div style="font-size:.64rem;color:var(--text3);margin-top:3px">Cuando la compraste anotaste que venderías si: “'+_diaEsc(c.venderSi)+'”</div>':'')+'</td>'+
+      '<td style="padding:7px 5px"><button class="btn btn-sm" onclick="stAbrir(\''+c.t+'\')" title="Señales técnicas">📊</button></td></tr>';}).join('')+'</tbody></table></div>';
+  el.innerHTML=h+'</div>';}
+(function(){var _dr=decRender;decRender=async function(){var r=await _dr.apply(this,arguments);try{vsRender();}catch(e){}return r;};})();
+// aviso en la cartera: solo las 🟢
+async function vsAlerta(){try{var L=(await vsEval()).filter(function(c){return c.sem==='g';}),card=document.getElementById('nv-vend');
+  if(!L.length){if(card)card.style.display='none';return;}
+  var top=document.querySelector('#nv-root .nvdist');if(!top||!top.parentNode)return;
+  if(!card){card=document.createElement('div');card.className='card';card.id='nv-vend';}top.parentNode.insertBefore(card,top);card.style.cssText='margin:0 0 .8rem;padding:9px 14px;border-left:3px solid var(--accent)';
+  card.innerHTML='<div style="font-size:.78rem;line-height:1.9"><b>👀 Vendidas para volver a mirar</b> <span style="color:var(--text3);font-size:.66rem">(bajaron, no están caras y no siguen cayendo)</span><br>'+L.map(function(c){return '<span class="nvchip" style="margin-right:6px;cursor:pointer" onclick="showPage(\'rotaciones\')">🟢 <b>'+c.t+'</b> −'+Math.abs(c.pct).toFixed(0)+'%</span>';}).join('')+'</div>';}catch(e){}}
+
 (function(){var _rr=rotRender;rotRender=async function(){var pr=_rr.apply(this,arguments);for(var i=0;i<40&&!document.getElementById('rot-tot');i++)await new Promise(function(r){setTimeout(r,100);});try{await decRender();}catch(e){console.warn('dec',e);}return pr;};})();
 
 // Efecto disposición (Odean 1998): en cada día con ventas, entre lo que tenías, cuánto de lo que estaba en ganancia vendiste (PGR)
