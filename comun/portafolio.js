@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2873, APP_VERSION_FECHA='30/10/2026';
+var APP_VERSION=2874, APP_VERSION_FECHA='12/11/2026';
 var APP_CHANGELOG=[
+  'v2874 | 2026-11-12 | Rendimiento (arriba): debajo de la ganancia se muestra "vendido: +X%/año", el rendimiento anual solo de lo ya vendido (ganancia realizada / capital × tiempo). El tooltip aclara el sesgo y muestra el total anualizado aprox.',
   'v2873 | 2026-11-12 | Página principal: selector ☰ Detalle / ▦ Mapa de calor (tamaño = peso en la cartera; color = hoy, vs. mi precio o al objetivo; agrupado por país o rubro; panel con acciones al tocar un cuadro).',
   'v2872 | 2026-11-10 | Rotaciones: 👀 Vendidas para volver a mirar (bajaron X% desde tu venta; semáforo con valuación, tendencia y resultados; muestra por qué la vendiste) y aviso 🟢 en la cartera.',
   'v2871 | 2026-11-10 | Nueva página 💸 Gastos: carga rápida (monto + categoría), resumen por mes y categoría, dónde te desviás de tu promedio y detector de gasto hormiga. Cada perfil con sus gastos.',
@@ -11631,6 +11632,11 @@ function nvRender(){
  _nvMover();try{nvTermo();nvCalendario();nvMov();nvIdeal();nvPlanSalida();nvVal();nvLinea();setTimeout(function(){try{stChips();}catch(e){}},2500);setTimeout(function(){try{vsAlerta();}catch(e){}},5000);}catch(e){console.warn('nv extras',e);}try{bcSwapCard();}catch(e){}
  var k=NV_K;document.getElementById('nv-kv').textContent=k.val!=null?'USD '+_nvN(k.val):'—';
  var kr=document.getElementById('nv-kr');kr.textContent=_nvP(k.rend);kr.style.color=k.rend>=0?'var(--accent)':'var(--red)';document.getElementById('nv-krs').textContent=k.gan!=null?((k.gan>=0?'+':'−')+'USD '+_nvN(Math.abs(k.gan))):'';
+ try{var ga=_gaRealAnual(),krs=document.getElementById('nv-krs'),kk=krs&&krs.parentNode;if(kk){var ex=document.getElementById('nv-kra');if(!ex){ex=document.createElement('div');ex.id='nv-kra';ex.className='s port-sensitive';ex.style.cssText='font-size:.62rem;margin-top:2px;cursor:help;color:var(--text3)';kk.appendChild(ex);}
+  if(ga){var tot='';if(ga.desde&&k.rend!=null){var yrs=(Date.now()-new Date(ga.desde))/(365.25*864e5);if(yrs>0.5&&k.rend>-100)tot=' Rendimiento total anualizado aprox. (incluye lo abierto): '+_nvP((Math.pow(1+k.rend/100,1/yrs)-1)*100)+'/año.';}
+   ex.innerHTML='vendido: <b style="color:'+(ga.anual>=0?'var(--accent)':'var(--red)')+'">'+_nvP(ga.anual)+'</b>/año';
+   ex.title='Solo lo vendido ('+ga.n+' ventas): ganancia realizada USD '+_nvN(ga.gan)+' sobre USD '+_nvN(ga.costo)+' de costo, ponderado por el tiempo que estuvo invertido. NO cuenta lo que seguís teniendo abierto (incluidas las que pierden), así que tiende a verse mejor que la realidad.'+tot;}
+  else ex.textContent='';}}catch(e){}
  var kh=document.getElementById('nv-kh');kh.textContent=_nvP(k.hoyP);kh.style.color=(k.hoyP||0)>=0?'var(--accent)':'var(--red)';document.getElementById('nv-khs').textContent=k.hoy!=null?((k.hoy>=0?'+':'−')+'USD '+_nvN(Math.abs(k.hoy))):'';
  var tsel=_nvTsSel(),tl=NV_ROWS.filter(function(o){return NV.tipo==='rv'?o.rv:NV.tipo==='rf'?!o.rv:true;});
  var _nmk=NV_ROWS.filter(function(o){return MARKS[o.t];}).length;document.getElementById('nv-fbar').innerHTML=(_nmk||NV.mk?'<span class="nvchip'+(NV.mk?' on':'')+'" onclick="NV.mk=!NV.mk;nvSave();nvRender()" title="Ver solo los activos marcados">🏷 Marcados <span style="font-family:var(--mono);font-size:.64rem;color:var(--text3)">'+_nmk+'</span></span>':'')+NV_TS.map(function(x){var n=tl.filter(function(o){return o.s===x[0];}).length;if(!n&&!(NV.ts||{})[x[0]])return '';var on=!!(NV.ts||{})[x[0]];return '<span class="nvchip'+(on?' on':'')+'"'+(tsel.length&&!on?' style="opacity:.5"':'')+' onclick="nvTs(\''+x[0]+'\')">'+x[1]+' <span style="font-family:var(--mono);font-size:.64rem;color:var(--text3)">'+n+'</span></span>';}).join('')+'';
@@ -12903,6 +12909,10 @@ function _decVentas(){try{getPositions();}catch(e){}var by={},out=[];
     var q=+m.qty,tot=lots.reduce(function(s,l){return s+l.q;},0);if(!(tot>0))return;var dias=lots.reduce(function(s,l){return s+l.q*(new Date(x.f)-new Date(l.f))/864e5;},0)/tot,fr=Math.min(1,q/tot);
     lots.forEach(function(l){l.q-=l.q*fr;});out.push({t:t,f:x.f,dias:dias,gp:m.gananciaPct,u:_rotUSD(m),q:q,m:m});});abiertos[t]=lots.filter(function(l){return l.q>1e-6;});});
   return {V:out,lots:abiertos};}
+// Rendimiento anual de lo YA VENDIDO: ganancia realizada en USD / capital-años invertido (costo x tiempo que estuvo invertido). No cuenta lo abierto.
+function _gaRealAnual(){try{var D=_decVentas(),g=0,ca=0,n=0,c0=0;D.V.forEach(function(v){if(!(v.u>0)||v.gp==null||!isFinite(v.gp)||!(v.dias>0))return;var cost=v.u/(1+v.gp/100);if(!(cost>0))return;g+=v.u-cost;ca+=cost*Math.max(v.dias,1)/365;c0+=cost;n++;});
+  if(n<3||!(ca>0))return null;var anual=g/ca*100,primero=null;_decMovs().forEach(function(m){var f=_phIso(m.fecha);if(f&&(!primero||f<primero))primero=f;});
+  return {anual:anual,gan:g,n:n,costo:c0,capAnios:ca,desde:primero};}catch(e){return null;}}
 function _decSesgo(D){var hoy=new Date(),w=function(a,k,wk){var W=a.reduce(function(s,x){return s+(x[wk]||0);},0);return W?a.reduce(function(s,x){return s+x[k]*(x[wk]||0);},0)/W:null;};
   var V=D.V.filter(function(v){return v.gp!=null&&isFinite(v.gp)&&v.u>0;}),vg=V.filter(function(v){return v.gp>0;}),vp=V.filter(function(v){return v.gp<=0;});
   var seen={},O=(NV_ROWS||[]).filter(function(o){if(seen[o.t]||DEC.exc.indexOf(o.t)>=0||o.d==null)return false;seen[o.t]=1;return true;}).map(function(o){var L=D.lots[o.t]||[],tq=L.reduce(function(s,l){return s+l.q;},0);return {t:o.t,d:o.d,usd:o.usd||0,dias:tq>0?L.reduce(function(s,l){return s+l.q*(hoy-new Date(l.f))/864e5;},0)/tq:null};});
