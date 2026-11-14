@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2879, APP_VERSION_FECHA='14/11/2026', V4_BASE=2876;
+var APP_VERSION=2880, APP_VERSION_FECHA='14/11/2026', V4_BASE=2876;
 var APP_CHANGELOG=[
+  'v2880 | 2026-11-14 | V4 · v4 — Inicio: si el calendario de balances todavía no cargó en este equipo, lo vuelve a pedir para que "Qué hacer hoy" muestre los balances cercanos igual en PC y celular.',
   'v2879 | 2026-11-14 | V4 · v3 — Corrige el error "insertBefore" al abrir en el celular (la Cartera no terminaba de armarse con el diseño V4).',
   'v2878 | 2026-11-14 | V4 · v2 — Qué hacer hoy: avisa señales de compra validadas en la lista de seguimiento / cartera ideal (lo que no tenés) y en las vendidas, y las vendidas que bajaron mucho desde tu venta. Chip 🟢 en la tarjeta de Cartera ideal.',
   'v2877 | 2026-11-14 | V4 · v1 — Inicio: el botón del ojo ahora oculta y muestra los montos (valor total, ganancia en USD).',
@@ -14471,6 +14472,7 @@ function _v4Todos(){var L=[],R=(typeof NV_ROWS!=='undefined'&&NV_ROWS)||[],seen=
     L.push({ic:'target',col:'var(--accent)',t:o.up<=0?o.t+' llegó a tu precio de venta':o.t+' está a '+o.up.toFixed(1).replace('.',',')+'% de tu precio de venta',s:'Hoy '+_nvP(o.ch)+' · vs. tu precio '+_nvP(o.d),b:'Vender',f:"v4Ir('vender','"+o.t+"')"});});}catch(e){}
   try{if(typeof ST_ACT!=='undefined'&&ST_ACT)Object.keys(ST_ACT).filter(function(t){return ST_ACT[t]&&ST_ACT[t].length;}).slice(0,3).forEach(function(t){var a=ST_ACT[t],buy=a.some(function(x){return x.r.dir>0;}),sell=a.some(function(x){return x.r.dir<0;});
     L.push({ic:'pulse',col:'var(--blue)',t:t+(buy&&sell?' con señales contradictorias':buy?' con señal de compra':' con señal de venta'),s:'Validada por el laboratorio · para ir a mirar',b:'Ver señal',f:"stAbrir('"+t+"')"});});}catch(e){}
+  try{if(typeof BAL!=='undefined'&&!BAL.d&&typeof balCargar==='function'&&!(V4.balT&&Date.now()-V4.balT<5*60000)){V4.balT=Date.now();balCargar().then(function(d){if(d)_v4Soon();}).catch(function(){});}}catch(e){}
   try{if(typeof balDeCartera==='function')balDeCartera().filter(function(x){var d=_balDias(x.f);return d>=0&&d<=7;}).slice(0,2).forEach(function(x){var d=_balDias(x.f),n=Array.isArray(x.t)?x.t.join(' / '):(x.t||x.s);
     L.push({ic:'cal',col:'var(--amber)',t:'Balance de '+n+(d===0?' hoy':d===1?' mañana':' en '+d+' días'),s:'Tenés posición abierta',b:'Revisar',f:"v4Nav('balances')"});});}catch(e){}
   try{if(typeof _bcSwaps==='function'&&typeof CER!=='undefined'&&CER.m&&typeof _LIVE912!=='undefined'&&_LIVE912){var S=_bcSwaps().concat(typeof _hdSwaps==='function'?_hdSwaps():[]);
