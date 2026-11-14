@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2876, APP_VERSION_FECHA='14/11/2026', V4_BASE=2876;
+var APP_VERSION=2877, APP_VERSION_FECHA='14/11/2026', V4_BASE=2876;
 var APP_CHANGELOG=[
+  'v2877 | 2026-11-14 | V4 · v1 — Inicio: el botón del ojo ahora oculta y muestra los montos (valor total, ganancia en USD).',
   'v2876 | 2026-11-14 | V4 · v0 — Rediseño: página Inicio (cómo voy, qué hacer hoy, mini mapa de toda la cartera), menú simple de 6 accesos con el resto en "Más", y en el celular barra inferior con botón + para cargar compra, venta o gasto rápido. Para volver al diseño anterior: Más → Volver al diseño anterior.',
   'v2875 | 2026-11-12 | La línea "vendido: X%/año" ahora siempre se muestra (con "—" y el motivo si faltan datos).',
   'v2874 | 2026-11-12 | Rendimiento (arriba): debajo de la ganancia se muestra "vendido: +X%/año", el rendimiento anual solo de lo ya vendido (ganancia realizada / capital × tiempo). El tooltip aclara el sesgo y muestra el total anualizado aprox.',
@@ -14505,7 +14506,8 @@ function v4Home(){var pg=document.getElementById('page-inicio');if(!pg)return;
     (mapa?'<div class="v4map">'+mapa+'</div><div class="v4leg">Tamaño = lo que pesa cada posición. Tocá un cuadro para abrirlo en el mapa completo.</div>':'<div class="v4vac">Cargando posiciones…</div>')+'</div>'+
     '<div class="v4mob"><h2 class="v4h2">Lo que más se movió</h2><div class="v4mv">'+(mv.length?mv.map(function(o){return '<button type="button" class="v4mc" onclick="v4Mapa(\''+o.t+'\')"><b>'+_v4e(o.t)+'</b><span style="color:'+col(o.ch)+'">'+_v4i(o.ch>=0?'up':'down',13)+pabs(o.ch)+'</span></button>';}).join(''):'<div class="v4vac">Sin variación del día todavía.</div>')+'</div></div>'+
     '<button type="button" class="v4open" onclick="v4Nav(\'portafolio\')"><span>Abrir la cartera completa</span>'+_v4i('chev')+'</button></div></div></div>';
-  pg.innerHTML=h;}
+  pg.innerHTML=h;_v4Blur();}
+function _v4Blur(){try{var pg=document.getElementById('page-inicio');if(pg)pg.classList.toggle('port-blurred',typeof _portBlurred!=='undefined'&&!!_portBlurred);}catch(e){}}
 var _v4T=null;function _v4Soon(){clearTimeout(_v4T);_v4T=setTimeout(function(){try{var p=document.getElementById('page-inicio');if(p&&p.classList.contains('active'))v4Home();}catch(e){}},200);}
 // ---- hojas (cargar / más)
 function v4Cerrar(){var o=document.getElementById('v4-sheet');if(o)o.remove();var f=document.getElementById('v4-fab');if(f)f.innerHTML=_v4i('plus',26);}
@@ -14589,6 +14591,7 @@ function v4Init(){var sb=document.querySelector('.sidebar'),pp=document.getEleme
   document.body.appendChild(bn);
   var _sp=showPage;showPage=function(id,btn){if(!btn)btn=_v4Btn(id);var r=_sp.call(this,id,btn);try{_v4Sync(id);if(id==='inicio')v4Home();}catch(e){}return r;};
   if(typeof nvRender==='function'){var _nr=nvRender;nvRender=function(){var r=_nr.apply(this,arguments);_v4Soon();return r;};}
+  try{var _pb=portBlur,_pu=portUnblur;portBlur=function(){var r=_pb.apply(this,arguments);_v4Blur();return r;};portUnblur=function(){var r=_pu.apply(this,arguments);_v4Blur();return r;};}catch(e){}
   _v4Rail();var n=0,iv=setInterval(function(){_v4Rail();if(++n>12)clearInterval(iv);},1500);
   showPage('inicio',hb);
   setTimeout(function(){try{if(typeof vsEval==='function')vsEval().then(function(L){V4.vs=(L||[]).filter(function(c){return c.sem==='g';});_v4Soon();}).catch(function(){});}catch(e){}},9000);
