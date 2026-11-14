@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2877, APP_VERSION_FECHA='14/11/2026', V4_BASE=2876;
+var APP_VERSION=2878, APP_VERSION_FECHA='14/11/2026', V4_BASE=2876;
 var APP_CHANGELOG=[
+  'v2878 | 2026-11-14 | V4 · v2 — Qué hacer hoy: avisa señales de compra validadas en la lista de seguimiento / cartera ideal (lo que no tenés) y en las vendidas, y las vendidas que bajaron mucho desde tu venta. Chip 🟢 en la tarjeta de Cartera ideal.',
   'v2877 | 2026-11-14 | V4 · v1 — Inicio: el botón del ojo ahora oculta y muestra los montos (valor total, ganancia en USD).',
   'v2876 | 2026-11-14 | V4 · v0 — Rediseño: página Inicio (cómo voy, qué hacer hoy, mini mapa de toda la cartera), menú simple de 6 accesos con el resto en "Más", y en el celular barra inferior con botón + para cargar compra, venta o gasto rápido. Para volver al diseño anterior: Más → Volver al diseño anterior.',
   'v2875 | 2026-11-12 | La línea "vendido: X%/año" ahora siempre se muestra (con "—" y el motivo si faltan datos).',
@@ -13773,7 +13774,7 @@ function estRender(){
   // 1) Cartera ideal
   var sumObj=EST.d.items.reduce(function(s,i){return s+(i.obj||0);},0);
   var filas=EST.d.items.map(function(it,i){var o=map[it.tk],w=o?o.w:0,dif=it.obj>0?w-it.obj:null,v=null;try{v=_valPill(_valDe(it.tk));}catch(e){v='—';}
-    return '<tr><td '+td+'><b style="font-family:var(--mono)">'+_estEsc(it.tk)+'</b>'+(o?'':' <span class="mu" style="font-size:.64rem">(no la tenés)</span>')+'</td><td '+td+'>'+pc(w)+'</td>'+
+    return '<tr><td '+td+'><b style="font-family:var(--mono)">'+_estEsc(it.tk)+'</b>'+(o?'':' <span class="mu" style="font-size:.64rem">(no la tenés)</span>')+(typeof _v4Chip==='function'?_v4Chip(it.tk):'')+'</td><td '+td+'>'+pc(w)+'</td>'+
       '<td '+td+'><input type="number" min="0" max="100" step="0.5" value="'+(it.obj||'')+'" onchange="estSet('+i+',\'obj\',this.value)" '+inp+' style="width:64px"> %</td>'+
       '<td '+td+'>'+(dif==null?'—':'<span style="color:'+(dif<-0.5?'var(--amber)':dif>0.5?'var(--text3)':'var(--accent)')+'">'+(dif>=0?'+':'−')+Math.abs(dif).toFixed(1).replace('.',',')+' pp</span>')+'</td>'+
       '<td '+td+'>'+v+'</td><td '+td+'>'+_estCalPill(it.tk)+'</td>'+
@@ -14473,10 +14474,29 @@ function _v4Todos(){var L=[],R=(typeof NV_ROWS!=='undefined'&&NV_ROWS)||[],seen=
     L.push({ic:'cal',col:'var(--amber)',t:'Balance de '+n+(d===0?' hoy':d===1?' mañana':' en '+d+' días'),s:'Tenés posición abierta',b:'Revisar',f:"v4Nav('balances')"});});}catch(e){}
   try{if(typeof _bcSwaps==='function'&&typeof CER!=='undefined'&&CER.m&&typeof _LIVE912!=='undefined'&&_LIVE912){var S=_bcSwaps().concat(typeof _hdSwaps==='function'?_hdSwaps():[]);
     if(S.length)L.push({ic:'swap',col:'var(--amber)',t:S.length===1?'Un cambio de bonos rinde más':S.length+' cambios de bonos rinden más',s:'Rotación para analizar',b:'Analizar',f:"v4Ir('swap')"});}}catch(e){}
-  try{(V4.vs||[]).slice(0,2).forEach(function(c){L.push({ic:'back',col:'var(--blue)',t:c.t+' vendida: puede ser oportunidad',s:'Bajó desde tu venta · para volver a mirar',b:'Mirar',f:"v4Nav('rotaciones')"});});}catch(e){}
+  try{(V4.w||[]).slice(0,3).forEach(function(c){L.push({ic:'pulse',col:'var(--accent)',t:c.t+' (lista de seguimiento) con señal de compra',s:'No la tenés · validada por el laboratorio · evidencia '+(LAB_EVN[c.ev]||c.ev),b:'Ver señal',f:"stAbrir('"+c.t+"')"});});}catch(e){}
+  try{(V4.vs||[]).slice(0,3).forEach(function(c){var ab=Math.abs(c.pct).toFixed(0),lec=c.sem==='g'?'Lectura: para mirar':c.sem==='y'?'Lectura: dudosa':'Lectura: no parece oportunidad (cara o sigue cayendo)';
+    if(c.buy)L.push({ic:'back',col:'var(--accent)',t:c.t+' (vendida) con señal de compra',s:'Está '+ab+'% abajo de tu venta · evidencia '+(LAB_EVN[c.buy.ev]||c.buy.ev),b:'Ver señal',f:"stAbrir('"+c.t+"')"});
+    else L.push({ic:'back',col:'var(--blue)',t:c.t+' vendida: bajó '+ab+'% desde tu venta',s:lec,b:'Mirar',f:"v4Nav('rotaciones')"});});}catch(e){}
   try{var nm=R.filter(function(o){return typeof MARKS!=='undefined'&&MARKS[o.t];}).map(function(o){return o.t;}).filter(function(t,i,a){return a.indexOf(t)===i;}).length;
     if(nm)L.push({ic:'tag',col:'var(--text2)',t:nm===1?'1 activo marcado para repasar':nm+' activos marcados para repasar',s:'Repaso de a uno',b:'Repasar',f:"v4Ir('repaso')"});}catch(e){}
   return L;}
+// ---- Señales de compra para lo que NO tenés: lista de seguimiento / cartera ideal y vendidas
+async function _v4Buy(tk){try{if(typeof LAB==='undefined'||!LAB.res||!LAB.res.reglas)return null;if(!_phCat(getSector(tk)))return null;var R=await _stCalc(tk);if(!R||R.err||!R.E)return null;
+  var g=_labGrupo(tk),n=R.c.length,act=[];LAB_REGLAS.forEach(function(r){if(!(r.dir>0))return;var x=LAB.res.reglas[r.id]&&LAB.res.reglas[r.id][g];if(!x||x.st!=='ok')return;var ev=_labEventos(R.E,n,r);if(ev.length&&ev[ev.length-1]>=n-LAB_P.ventana)act.push({r:r,x:x});});
+  if(!act.length)return null;var o={fuerte:3,moderada:2,debil:1},m=0,k='debil';act.forEach(function(a){var v=o[a.x.ev||'debil']||1;if(v>m){m=v;k=a.x.ev||'debil';}});return {n:act.length,ev:k};}catch(e){return null;}}
+async function v4Senales(){if(V4.sBusy)return;V4.sBusy=true;try{
+  try{if(typeof EST!=='undefined'&&!EST.cargado)await estCargar();}catch(e){}
+  var held={};(NV_ROWS||[]).forEach(function(o){held[o.t]=1;});
+  var W=[];try{W=estTickers().filter(function(t,i,a){return t&&!held[t]&&a.indexOf(t)===i;}).slice(0,40);}catch(e){}
+  var w=[],wm={};for(var i=0;i<W.length;i++){var b=await _v4Buy(W[i]);if(b){w.push({t:W[i],n:b.n,ev:b.ev});wm[W[i]]=b;}}
+  V4.w=w;V4.wMap=wm;V4.wN=W.length;_v4Soon();
+  var L=[];try{L=await vsEval();}catch(e){}var vs=[];
+  for(var j=0;j<L.length;j++){var c=L[j],bb=held[c.t]?null:await _v4Buy(c.t);if(bb||c.sem==='g'||c.pct<=-30)vs.push({t:c.t,pct:c.pct,sem:c.sem,buy:bb});}
+  vs.sort(function(a,b2){return (b2.buy?1:0)-(a.buy?1:0)||(a.sem==='g'?0:1)-(b2.sem==='g'?0:1)||a.pct-b2.pct;});V4.vs=vs;_v4Soon();
+  try{var pe=document.getElementById('page-estrategia');if(pe&&pe.classList.contains('active')&&w.length&&typeof estRender==='function')estRender();}catch(e){}
+ }catch(e){console.warn('v4Senales',e);}V4.sBusy=false;}
+function _v4Chip(tk){try{var b=V4.wMap&&V4.wMap[tk];if(!b)return '';return ' <span class="nvchip" title="Señal de compra validada por el laboratorio (evidencia '+(LAB_EVN[b.ev]||b.ev)+'). Es para ir a mirar, no una orden de compra." style="padding:0 6px;font-size:.66rem;color:var(--accent);cursor:pointer" onclick="stAbrir(\''+tk+'\')">🟢 Compra · '+(LAB_EVN[b.ev]||b.ev)+'</span>';}catch(e){return '';}}
 function v4Home(){var pg=document.getElementById('page-inicio');if(!pg)return;
   var k=(typeof NV_K!=='undefined'&&NV_K)||{},R=((typeof NV_ROWS!=='undefined'&&NV_ROWS)||[]).filter(function(o){return o.usd>0;}),nom='';try{nom=String(CFG.nombre||'').split(' ')[0];}catch(e){}
   var col=function(v){return v==null?'var(--text2)':v>=0?'var(--accent)':'var(--red)';},fl=function(v){return v==null?'':_v4i(v>=0?'up':'down',22);},usd=function(v){return v==null?'—':(v>=0?'+':'−')+'USD '+_nvN(Math.abs(v));};
@@ -14594,6 +14614,6 @@ function v4Init(){var sb=document.querySelector('.sidebar'),pp=document.getEleme
   try{var _pb=portBlur,_pu=portUnblur;portBlur=function(){var r=_pb.apply(this,arguments);_v4Blur();return r;};portUnblur=function(){var r=_pu.apply(this,arguments);_v4Blur();return r;};}catch(e){}
   _v4Rail();var n=0,iv=setInterval(function(){_v4Rail();if(++n>12)clearInterval(iv);},1500);
   showPage('inicio',hb);
-  setTimeout(function(){try{if(typeof vsEval==='function')vsEval().then(function(L){V4.vs=(L||[]).filter(function(c){return c.sem==='g';});_v4Soon();}).catch(function(){});}catch(e){}},9000);
+  setTimeout(v4Senales,9000);setTimeout(function(){if(!V4.w||(!V4.w.length&&typeof LAB!=='undefined'&&LAB.res))v4Senales();},40000);setInterval(v4Senales,20*60000);
   setInterval(_v4Soon,60000);}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(v4Init,1200);});else setTimeout(v4Init,1500);
