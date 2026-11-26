@@ -21,8 +21,9 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;_errA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Versión de la app ───────────────────────
-var APP_VERSION=2883, APP_VERSION_FECHA='14/11/2026', V4_BASE=2876;
+var APP_VERSION=2884, APP_VERSION_FECHA='14/11/2026', V4_BASE=2876;
 var APP_CHANGELOG=[
+  'v2884 | 2026-11-26 | V4 · v8 — Grandes fondos: nueva sección "Qué cambió este trimestre" (compras nuevas, aumentos, reducciones y ventas, con 🤝 cuando varios fondos compran lo mismo), precio del fondo vs. hoy, botón "+ Seguimiento". Avisos en el Inicio cuando un fondo vende algo que tenés o compra algo de tu seguimiento; distintivo 🏛 en la lista de seguimiento.',
   'v2883 | 2026-11-24 | V4 · v7 — Lista de seguimiento: zona de compra sugerida por ticker (soportes con rebotes repetidos, EMA200 y precio barato por valuación; marca si coinciden), con probabilidad de llegar en 3 meses y botón "Usar como aviso".',
   'v2882 | 2026-11-24 | V4 · v6 — Lista de seguimiento: semáforo por ticker (precio de aviso, caída + barata, señales técnicas), lectura con motivos y cuidados, botones Comprar / Visto (pausa el aviso hasta que se mueva 5%) / 📊. Sin peso objetivo. Panel 📊: simulación de Montecarlo (rango a 1 y 3 meses y probabilidad de tocar tu precio de aviso).',
   'v2881 | 2026-11-14 | V4 · v5 — Lista de seguimiento con precio de aviso: definís un precio en USD (soporte o máximo anterior) y cuando llega o está a 2% aparece en "Qué hacer hoy". La tabla muestra precio de hoy, mín/máx de 52 semanas y cuánto falta; el peso objetivo queda opcional.',
@@ -13569,7 +13570,7 @@ function gfRender(){
   var idx={};act.forEach(function(f){var prev={};(f.prev&&f.prev.pos||[]).forEach(function(p){if(p.t)prev[_gfNorm(p.t)]=p;});var o={};
     f.pos.forEach(function(p){if(!p.t)return;var k=_gfNorm(p.t),w=f.tot>0?p.v/f.tot*100:0,pv=prev[k],ch=null;
       if(!f.prev)ch=null;else if(!pv)ch='nueva';else if(pv.s>0){var d=(p.s-pv.s)/pv.s*100;ch=d>=5?'sube':d<=-5?'baja':'igual';}
-      o[k]={w:w,n:p.n,ch:ch,d:pv&&pv.s>0?(p.s-pv.s)/pv.s*100:null};});idx[f.id]=o;});
+      o[k]={w:w,n:p.n,ch:ch,d:pv&&pv.s>0?(p.s-pv.s)/pv.s*100:null,p13:p.s>0?p.v/p.s:null};});idx[f.id]=o;});
   var chip=function(f,x){var fl=x.ch==='nueva'?'<span style="color:var(--accent)" title="Posición nueva este trimestre"> ★nueva</span>':x.ch==='sube'?'<span style="color:var(--accent)" title="Aumentó la cantidad de acciones"> ▲</span>':x.ch==='baja'?'<span style="color:var(--red)" title="Redujo la cantidad de acciones"> ▼</span>':'';
     return '<span style="display:inline-block;margin:1px 8px 1px 0;white-space:nowrap">'+f.corto+' <b>'+_gfFmt(x.w)+'</b>'+fl+'</span>';};
   var dondeEsta=function(k){return act.filter(function(f){return idx[f.id][k];}).map(function(f){return {f:f,x:idx[f.id][k]};});};
@@ -13590,10 +13591,10 @@ function gfRender(){
   var cand=Object.keys(U).filter(function(k){return !M[k];}).map(function(k){var d=dondeEsta(k),sw=d.reduce(function(s,o){return s+o.x.w;},0),rec=d.some(function(o){return o.x.ch==='nueva'||o.x.ch==='sube';});
     return {k:k,d:d,sc:d.length*10+Math.min(sw,30)+(rec?3:0),ced:_gfCedear(k)};}).sort(function(a,b){return b.sc-a.sc;});
   var cc=cand.filter(function(c){return c.ced;}).slice(0,15),sinCed=cand.filter(function(c){return !c.ced;}).length;
-  var s3=cc.length?'<div class="tw"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Activo</th><th '+th+'>Fondos que lo tienen</th></tr></thead><tbody>'+cc.map(function(c){
-    return '<tr><td '+td+'><b style="font-family:var(--mono)">'+c.k+'</b> <span class="mu" style="font-size:.68rem">'+String(c.d[0].x.n||'').slice(0,28)+'</span></td><td '+td+'>'+c.d.map(function(o){return chip(o.f,o.x);}).join('')+'</td></tr>';}).join('')+'</tbody></table></div>'
+  var s3=cc.length?'<div class="tw"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Activo</th><th '+th+'>Fondos que lo tienen</th><th '+th+'>Hoy vs. precio del fondo</th><th '+th+'></th></tr></thead><tbody>'+cc.map(function(c){var b=c.d.slice().sort(function(a,b2){return b2.x.w-a.x.w;})[0];
+    return '<tr><td '+td+'><b style="font-family:var(--mono)">'+c.k+'</b> <span class="mu" style="font-size:.68rem">'+String(c.d[0].x.n||'').slice(0,28)+'</span></td><td '+td+'>'+c.d.map(function(o){return chip(o.f,o.x);}).join('')+'</td><td '+td+'>'+_gfVsHtml(c.k,b.x.p13,b.f)+'</td><td '+td+'>'+_gfSeguirBtn(c.k,b.x.p13,b.f)+'</td></tr>';}).join('')+'</tbody></table></div>'
     :'<div style="padding:.6rem .2rem;color:var(--text3);font-size:.76rem">No hay candidatos con Cedear.</div>';
-  s3+='<div style="padding:.4rem .2rem;font-size:.68rem;color:var(--text3)">Orden: más fondos que lo tienen, más peso y si lo compraron o aumentaron último trimestre. Solo se muestran los que tienen Cedear'+(sinCed?' ('+sinCed+' más no se pueden comprar como Cedear acá)':'')+'. Para evaluar el precio usá "¿Cara o barata?".</div>';
+  s3+='<div style="padding:.4rem .2rem;font-size:.68rem;color:var(--text3)">Orden: más fondos que lo tienen, más peso y si lo compraron o aumentaron último trimestre. Solo se muestran los que tienen Cedear'+(sinCed?' ('+sinCed+' más no se pueden comprar como Cedear acá)':'')+'. Para evaluar el precio usá "¿Cara o barata?". "Precio del fondo" = precio al cierre del trimestre que informa el 13F (aproxima a cuánto la tenían).</div>';
   // 4) concentración y detalle por fondo
   var top5=function(a){return a.sort(function(x,y){return y-x;}).slice(0,5).reduce(function(s,v){return s+v;},0);};
   var conc='<div class="tw"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'></th><th '+th+'>Cartera presentada</th><th '+th+'>Posiciones</th><th '+th+'>Top 5 pesan</th><th '+th+'>Coincido con</th></tr></thead><tbody>'+
@@ -13603,8 +13604,59 @@ function gfRender(){
   var det=act.map(function(f){return '<details style="margin:.3rem .2rem"><summary style="cursor:pointer;font-size:.78rem"><b>'+f.corto+'</b> — mayores posiciones</summary><div style="padding:.3rem 0">'+f.pos.slice(0,15).map(function(p){var k=p.t?_gfNorm(p.t):null,w=f.tot>0?p.v/f.tot*100:0;
     return '<div style="font-size:.74rem;padding:2px 0">'+(k&&M[k]?'<span style="color:var(--accent)">●</span> ':'○ ')+'<b style="font-family:var(--mono)">'+(k||'?')+'</b> <span class="mu">'+String(p.n).slice(0,30)+'</span> · '+_gfFmt(w)+'</div>';}).join('')+'<div class="mu" style="font-size:.66rem;padding-top:3px">● = la tenés</div></div></details>';}).join('');
   var sec=function(t,b){return '<div class="card" style="margin-bottom:1rem"><div class="card-header"><span class="card-title">'+t+'</span></div>'+b+'</div>';};
-  pg.innerHTML=head(conc)+sec('Mis coincidencias con los fondos',s1)+sec('Lo que tienen en común los fondos',s2)+sec('Para estudiar: lo que tienen los fondos y no tengo',s3)+sec('Carteras de cada fondo','<div>'+det+'</div>');
+  var MV=_gfMovs(act,idx,M);GF.ult={act:act,idx:idx};
+  pg.innerHTML=head('')+sec('🔄 Qué cambió este trimestre',_gfMovHtml(MV,M,th,td))+sec('Mis coincidencias con los fondos',s1)+sec('Para estudiar: lo que tienen los fondos y no tengo',s3)+sec('Lo que tienen en común los fondos',s2)+sec('Carteras de cada fondo',conc+'<div style="margin-top:.5rem">'+det+'</div>');
+  _gfPreciosPedir(MV,cc);
 }
+
+// ---- Grandes fondos: movimientos del trimestre, precio del fondo vs hoy, alertas y lista de seguimiento
+GF.px={};
+function _gfHoy(k){try{var c=GF.px[k];if(c&&c.p>0)return c.p;var p=(typeof _v4Px==='function')?_v4Px(k):null;return p>0?p:null;}catch(e){return null;}}
+function _gfP13(k,p13){if(!(p13>0))return null;var h=_gfHoy(k);if(h>0&&p13<h/200)p13*=1000;return p13;}
+function _gfMovs(act,idx,M){var L=[];act.forEach(function(f){if(!f.prev||!f.prev.pos)return;var o=idx[f.id],full=f.n<=60;
+  Object.keys(o).forEach(function(k){var x=o[k];if(x.ch==='nueva'&&x.w>=0.5)L.push({f:f,k:k,n:x.n,t:'nueva',w:x.w,p13:x.p13});else if(x.ch==='sube'&&x.d>=20&&x.w>=0.5)L.push({f:f,k:k,n:x.n,t:'sube',d:x.d,w:x.w,p13:x.p13});else if(x.ch==='baja'&&x.d<=-20)L.push({f:f,k:k,n:x.n,t:'baja',d:x.d,w:x.w,p13:x.p13});});
+  var ptot=f.prev.tot||f.prev.pos.reduce(function(a,p){return a+(p.v||0);},0);
+  f.prev.pos.forEach(function(p){if(!p.t)return;var k=_gfNorm(p.t),pw=ptot>0?p.v/ptot*100:0;if(!o[k]&&pw>=0.5)L.push({f:f,k:k,n:p.n,t:'sale',w:0,pw:pw,full:full,p13:p.s>0?p.v/p.s:null});});});
+  var compra={};L.forEach(function(m){if(m.t==='nueva'||m.t==='sube')(compra[m.k]=compra[m.k]||[]).push(m.f.corto);});
+  L.forEach(function(m){m.mia=!!M[m.k];m.varios=(compra[m.k]||[]).length>=2;});
+  var gr=function(m){var v=m.t==='sale'||m.t==='baja';return v&&m.mia?0:v?2:1;},ord={nueva:0,sube:1,sale:0,baja:1};L.sort(function(a,b){return gr(a)-gr(b)||(b.varios?1:0)-(a.varios?1:0)||ord[a.t]-ord[b.t]||(b.w||b.pw||0)-(a.w||a.pw||0);});
+  return {L:L,compra:compra};}
+function _gfVsHtml(k,p13,f){p13=_gfP13(k,p13);var h=_gfHoy(k);if(!(p13>0))return '<span class="mu">—</span>';var f2=function(v){return (typeof _wlF2==='function')?_wlF2(v):v.toFixed(2);};
+  if(!(h>0))return '<span style="font-family:var(--mono);font-size:.72rem">USD '+f2(p13)+'</span> <span class="mu" style="font-size:.66rem">(hoy: buscando…)</span>';
+  var d=(h/p13-1)*100,c=d<=-3?'var(--accent)':d>=15?'var(--amber)':'var(--text2)';
+  return '<div style="font-family:var(--mono);font-size:.72rem">fondo USD '+f2(p13)+' · hoy '+f2(h)+'</div><div style="font-size:.7rem;color:'+c+';font-weight:600">'+(d<=-0.5?'Hoy está '+Math.abs(d).toFixed(0)+'% más barata que cuando la tenían':d>=0.5?'Subió '+d.toFixed(0)+'% desde entonces':'Mismo precio que entonces')+'</div>';}
+function _gfSeguirBtn(k,p13,f){var en=(typeof EST!=='undefined'&&EST.d&&(EST.d.items||[]).some(function(i){return _gfNorm(i.tk)===k;}));
+  return en?'<span class="mu" style="font-size:.66rem">✓ en seguimiento</span>':'<button class="btn btn-sm" style="white-space:nowrap" onclick="gfSeguir(\''+k+'\','+(p13||0)+',\''+String(f.corto).replace(/'/g,'')+'\')" title="Agregar a tu lista de seguimiento. Si hoy está más cara que el precio del fondo, ese precio queda como aviso.">+ Seguimiento</button>';}
+async function gfSeguir(k,p13,corto){try{if(!EST.cargado)await estCargar();if(EST.d.items.some(function(i){return _gfNorm(i.tk)===k;})){GF.msg=k+' ya está en tu lista de seguimiento.';gfRender();return;}
+  var p=_gfP13(k,p13),h=_gfHoy(k),pa=(p>0&&h>0&&h>p*1.02)?Math.round(p*100)/100:0;
+  EST.d.items.push({tk:k,obj:0,pa:pa,pd:'b',nota:'Lo tiene '+corto+' (13F)'+(pa?'; aviso al precio del fondo':'')});await estGuardar();try{valCargar();}catch(e){}try{wlRun(k);}catch(e){}
+  GF.msg='✔ '+k+' agregada a tu lista de seguimiento'+(pa?' con aviso en USD '+pa.toLocaleString('es-AR')+' (precio del fondo).':'. Hoy ya está a un precio igual o menor al del fondo, así que no puse aviso.');gfRender();}catch(e){GF.msg='No se pudo agregar: '+(e&&e.message||e);gfRender();}}
+var _gfPT=null;async function _gfPreciosPedir(MV,cc){var K={};(MV.L||[]).forEach(function(m){if(m.t!=='sale')K[m.k]=1;});(cc||[]).forEach(function(c){K[c.k]=1;});
+  var falta=Object.keys(K).filter(function(k){return !_gfHoy(k)&&!(GF.px[k]&&GF.px[k].err);}).slice(0,30);if(!falta.length||GF.pBusy)return;GF.pBusy=true;
+  for(var i=0;i<falta.length;i++){var k=falta[i];try{var q=await fetchFinnhub(getFinnhubTicker(k)==='BRKB'?'BRK.B':getFinnhubTicker(k));GF.px[k]={p:q.price,ts:Date.now()};}catch(e){GF.px[k]={err:1};}await new Promise(function(r){setTimeout(r,400);});}
+  GF.pBusy=false;var pg=document.getElementById('page-grandes');if(pg&&pg.classList.contains('active'))gfRender();}
+function _gfMovHtml(MV,M,th,td){var L=MV.L;if(!L.length)return '<div style="padding:.6rem .2rem;color:var(--text3);font-size:.76rem">Sin cambios importantes contra el trimestre anterior (o falta el 13F anterior: tocá ⟳).</div>';
+  var lab={nueva:['★ Compra nueva','var(--accent)'],sube:['▲ Aumentó','var(--accent)'],baja:['▼ Redujo','var(--red)'],sale:['✖ Vendió','var(--red)']};
+  var cv=Object.keys(MV.compra).filter(function(k){return MV.compra[k].length>=2;});
+  var h='<div style="padding:.2rem .2rem .6rem;font-size:.72rem;color:var(--text2);line-height:1.5">Lo que cada fondo <b>hizo</b> en su último trimestre: compras nuevas y aumentos de 20% o más (con al menos 0,5% de su cartera), reducciones de 20% o más y ventas totales. Lo que más información da: <b>compras nuevas con peso grande</b> y <b>varios fondos comprando lo mismo</b>.</div>';
+  if(cv.length)h+='<div style="margin:0 .2rem .6rem;padding:7px 10px;border:1px solid var(--accent);border-radius:8px;font-size:.76rem">🤝 <b>Compraron varios fondos a la vez:</b> '+cv.map(function(k){return '<b style="font-family:var(--mono)">'+k+'</b> ('+MV.compra[k].join(', ')+')';}).join(' · ')+'</div>';
+  h+='<div class="tw"><table style="width:100%;border-collapse:collapse"><thead><tr><th '+th+'>Fondo</th><th '+th+'>Movimiento</th><th '+th+'>Activo</th><th '+th+'>Peso en su cartera</th><th '+th+'>Hoy vs. precio del fondo</th><th '+th+'>¿La tengo?</th><th '+th+'></th></tr></thead><tbody>'+L.slice(0,40).map(function(m){var lb=lab[m.t],ced=_gfCedear(m.k);
+    var mov='<span style="color:'+lb[1]+';font-weight:700">'+lb[0]+'</span>'+(m.t==='sube'||m.t==='baja'?' <span class="mu">'+(m.d>0?'+':'−')+Math.abs(m.d).toFixed(0)+'% acciones</span>':'')+(m.t==='sale'?' <span class="mu">'+(m.full?'toda la posición':'salió de sus 60 mayores')+'</span>':'')+(m.varios?' <span title="Más de un fondo la compró o aumentó">🤝</span>':'');
+    return '<tr style="'+(m.mia&&(m.t==='sale'||m.t==='baja')?'background:rgba(255,107,107,.07)':m.varios?'background:rgba(46,229,138,.06)':'')+'"><td '+td+'>'+m.f.corto+'</td><td '+td+'>'+mov+'</td><td '+td+'><b style="font-family:var(--mono)">'+m.k+'</b> <span class="mu" style="font-size:.66rem">'+String(m.n||'').slice(0,24)+'</span></td><td '+td+'>'+(m.t==='sale'?'<span class="mu">era '+_gfFmt(m.pw)+'</span>':_gfFmt(m.w))+'</td><td '+td+'>'+(m.t==='sale'?'<span class="mu">—</span>':_gfVsHtml(m.k,m.p13,m.f))+'</td>'+
+      '<td '+td+'>'+(m.mia?'<span style="color:'+(m.t==='sale'||m.t==='baja'?'var(--red)':'var(--accent)')+';font-weight:600">Sí · '+_gfFmt(M[m.k].w)+'</span>':'<span class="mu">No'+(ced?'':' · sin Cedear')+'</span>')+'</td>'+
+      '<td '+td+'>'+(m.t==='sale'||m.t==='baja'?(m.mia?'<span class="mu" style="font-size:.66rem">Releé tu tesis</span>':''):(m.mia||!ced?'':_gfSeguirBtn(m.k,m.p13,m.f)))+'</td></tr>';}).join('')+'</tbody></table></div>';
+  return h+'<div style="padding:.4rem .2rem;font-size:.68rem;color:var(--text3)">"Precio del fondo" = precio al cierre del trimestre del 13F; aproxima a cuánto la compraron, no es su precio exacto. Que un fondo venda no significa que tengas que vender: sirve para releer por qué la tenés.</div>';}
+// Avisos para "Qué hacer hoy" (13F presentados hace menos de 75 días)
+function _gfAvisos(){var out=[];try{if(!GF.d){if(!GF._v4p){GF._v4p=true;gfCargar().then(function(){try{_v4Soon();}catch(e){}});}return out;}
+  var act=(GF.d.fondos||[]).filter(function(f){return f.id!=='scn'&&_gfActivo(f)&&f.prev&&(Date.now()-new Date(f.presentado))/864e5<75;});if(!act.length)return out;
+  var M=gfMias().m,idx={};act.forEach(function(f){var prev={},o={};(f.prev.pos||[]).forEach(function(p){if(p.t)prev[_gfNorm(p.t)]=p;});f.pos.forEach(function(p){if(!p.t)return;var k=_gfNorm(p.t),pv=prev[k];o[k]={w:f.tot>0?p.v/f.tot*100:0,n:p.n,ch:!pv?'nueva':pv.s>0?((p.s-pv.s)/pv.s*100>=5?'sube':(p.s-pv.s)/pv.s*100<=-5?'baja':'igual'):null,d:pv&&pv.s>0?(p.s-pv.s)/pv.s*100:null,p13:p.s>0?p.v/p.s:null};});idx[f.id]=o;});
+  var MV=_gfMovs(act,idx,M),W={};((typeof EST!=='undefined'&&EST.d&&EST.d.items)||[]).forEach(function(i){W[_gfNorm(i.tk)]=1;});
+  MV.L.forEach(function(m){if(m.mia&&(m.t==='sale'||(m.t==='baja'&&m.d<=-30)))out.push({ic:'swap',col:'var(--red)',t:m.f.corto+(m.t==='sale'?' vendió '+(m.full?'toda su posición en ':'casi toda su posición en '):' redujo '+Math.abs(m.d).toFixed(0)+'% su posición en ')+m.k,s:'La tenés · 13F al '+_gfFecha(m.f.periodo)+' · buen momento para releer tu tesis',b:'Ver',f:"v4Nav('grandes')"});
+    else if(W[m.k]&&(m.t==='nueva'||m.t==='sube'))out.push({ic:'pulse',col:'var(--blue)',t:m.f.corto+(m.t==='nueva'?' compró ':' aumentó ')+m.k+' (de tu seguimiento)',s:'Peso en su cartera '+_gfFmt(m.w)+' · 13F al '+_gfFecha(m.f.periodo),b:'Ver',f:"v4Nav('grandes')"});});
+  }catch(e){}return out.slice(0,3);}
+// Distintivo para la lista de seguimiento
+function _gfBadge(tk){try{if(!GF.d)return '';var k=_gfNorm(tk),L=[];(GF.d.fondos||[]).forEach(function(f){if(f.id==='scn'||!_gfActivo(f))return;var p=f.pos.filter(function(x){return x.t&&_gfNorm(x.t)===k;})[0];if(!p)return;var pv=f.prev&&(f.prev.pos||[]).filter(function(x){return x.t&&_gfNorm(x.t)===k;})[0],ch=!f.prev?'':!pv?' ★':pv.s>0&&(p.s-pv.s)/pv.s>=0.05?' ▲':pv.s>0&&(p.s-pv.s)/pv.s<=-0.05?' ▼':'';L.push(f.corto+ch);});
+  if(!L.length)return '';return '<div style="font-size:.6rem;color:var(--text2);margin-top:2px;cursor:pointer" title="Fondos que la tienen según su último 13F (★ nueva · ▲ aumentó · ▼ redujo)" onclick="v4Nav(\'grandes\')">🏛 '+L.join(' · ')+'</div>';}catch(e){return '';}}
 function gfInit(){if(document.getElementById('page-grandes'))return;var pp=document.getElementById('page-portafolio'),mb=document.querySelector('.nav-item[onclick*="\'balances\'"]')||document.querySelector('.nav-item[onclick*="\'movimientos\'"]');if(!pp||!mb)return;
   var pg=document.createElement('div');pg.className='page';pg.id='page-grandes';pp.parentNode.appendChild(pg);
   var b=document.createElement('button');b.className='nav-item';b.setAttribute('onclick',"showPage('grandes',this)");b.innerHTML='<span>🏛</span>Grandes fondos';mb.parentNode.insertBefore(b,mb.nextSibling);}
@@ -14473,6 +14525,7 @@ function _v4Todos(){var L=[],R=(typeof NV_ROWS!=='undefined'&&NV_ROWS)||[],seen=
     var t=it.tk+(av&&av.hit?' llegó a tu precio de aviso':w.buy?' con señal de compra validada':av&&av.ok?' está a '+_wlP(av.dist)+' de tu precio de aviso':' cayó '+_wlP(w.dd,0)+' y está barata');
     var sub=lc.mot.slice(1).concat(lc.cuid.map(function(c){return '⚠ '+c;}));if(av&&(av.ok))sub.unshift('Hoy USD '+_wlF2(av.px)+' · aviso '+(av.sube?'sube a':'baja a')+' USD '+_wlF2(it.pa));if(it.nota)sub.push(it.nota);
     L.push({ic:av&&av.ok?'target':'pulse',col:lc.cuid.length?'var(--amber)':'var(--accent)',t:t+' (seguimiento)',s:sub.join(' · ')||'De tu lista de seguimiento',b:'Analizar',f:"stAbrir('"+it.tk+"')"});});}catch(e){}
+  try{if(typeof _gfAvisos==='function')_gfAvisos().forEach(function(x){L.push(x);});}catch(e){}
   try{(V4.vs||[]).slice(0,3).forEach(function(c){var ab=Math.abs(c.pct).toFixed(0),lec=c.sem==='g'?'Lectura: para mirar':c.sem==='y'?'Lectura: dudosa':'Lectura: no parece oportunidad (cara o sigue cayendo)';
     if(c.buy)L.push({ic:'back',col:'var(--accent)',t:c.t+' (vendida) con señal de compra',s:'Está '+ab+'% abajo de tu venta · evidencia '+(LAB_EVN[c.buy.ev]||c.buy.ev),b:'Ver señal',f:"stAbrir('"+c.t+"')"});
     else L.push({ic:'back',col:'var(--blue)',t:c.t+' vendida: bajó '+ab+'% desde tu venta',s:lec,b:'Mirar',f:"v4Nav('rotaciones')"});});}catch(e){}
@@ -14708,7 +14761,7 @@ function _wlTabla(td,th,inp,map,pc){
   var rows=F.map(function(f){var it=f.it,i=f.i,lc=f.lc,w=lc.w,o=map[it.tk],px=_v4Px(it.tk),vv=(typeof VAL!=='undefined'&&VAL[it.tk])||{},av=lc.av,falta=(it.pa>0&&px>0)?(px-it.pa)/px*100:null,v='—';try{v=_valPill(_valDe(it.tk));}catch(e){}
     var sem=lc.snz?'w':lc.sem,cargando=!WL[it.tk];
     var c1='<div style="display:flex;align-items:center;gap:6px"><span title="'+lab[sem]+'" style="width:10px;height:10px;border-radius:50%;flex:none;background:'+col[sem]+'"></span><b style="font-family:var(--mono)">'+_estEsc(it.tk)+'</b></div>'+
-      '<div class="mu" style="font-size:.62rem;margin-top:2px">'+(o?'la tenés ('+pc(o.w)+')':'no la tenés')+'</div>';
+      '<div class="mu" style="font-size:.62rem;margin-top:2px">'+(o?'la tenés ('+pc(o.w)+')':'no la tenés')+'</div>'+(typeof _gfBadge==='function'?_gfBadge(it.tk):'');
     var c2='<span style="font-family:var(--mono)">'+(px>0?'USD '+_wlF2(px):'—')+'</span>'+((vv.hi||vv.lo)?'<div class="mu" style="font-size:.62rem;white-space:nowrap">'+(vv.lo?'<span style="cursor:pointer;text-decoration:underline dotted" title="Usar el mínimo de 52 semanas como precio de aviso" onclick="estSet('+i+',\'pa\','+vv.lo+')">mín '+_wlF2(vv.lo)+'</span>':'')+(vv.hi&&vv.lo?' · ':'')+(vv.hi?'<span style="cursor:pointer;text-decoration:underline dotted" title="Usar el máximo de 52 semanas como precio de aviso" onclick="estSet('+i+',\'pa\','+vv.hi+')">máx '+_wlF2(vv.hi)+'</span>':'')+'</div>':'')+
       (w.dd!=null?'<div style="font-size:.64rem;color:'+(w.dd<=-15?'var(--amber)':'var(--text3)')+'">'+(w.dd<=-0.5?'−'+_wlP(w.dd,0)+' desde el máx.':'en máximos')+'</div>':'');
     var c3='<span style="white-space:nowrap">'+(it.pa>0?'<span class="nvchip" style="cursor:pointer;font-size:.66rem;padding:1px 7px" title="Tocá para cambiar: avisar cuando baje hasta ese precio (soporte) o cuando suba hasta ese precio (máximo anterior)" onclick="estSet('+i+',\'pd\')">'+(it.pd==='s'?'▲ sube a':'▼ baja a')+'</span> ':'')+'<input type="number" min="0" step="0.01" value="'+(it.pa||'')+'" placeholder="USD" onchange="estSet('+i+',\'pa\',this.value)" '+inp.replace(/"$/,';width:84px"')+'></span>'+
